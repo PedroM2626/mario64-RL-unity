@@ -1,0 +1,14 @@
+# Unity ML-Agents
+mlagents==0.30.0
+
+# Dependências ML-Agents
+numpy>=1.21.0
+torch>=1.7.0
+tensorboard>=2.7.0
+protobuf>=3.19.0,<4.0.0
+
+# Para treinamento em cloud (opcional)
+# mlagents-cloud-utils
+
+# Utilitários
+pyyaml>=5.4.0
