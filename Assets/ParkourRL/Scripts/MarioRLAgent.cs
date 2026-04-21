@@ -33,7 +33,7 @@ namespace ParkourRL
         private float episodeTime;
         private float bestDistanceToGoal;
 
-        private const float MAX_EPISODE_TIME = 20f; // Episodio curto = aprendizado rapido
+        private const float MAX_EPISODE_TIME = 30f; // Tempo generoso para explorar
         
         // Cache array for Raycasts to prevent ALLOC_TEMP_MAIN leakage
         private RaycastHit[] raycastHitsCache = new RaycastHit[1];
@@ -213,10 +213,11 @@ namespace ParkourRL
             previousDistanceToGoal = currentDistance;
             previousPosition = currentPos;
 
-            // 4. Morte por queda (penalidade muito alta)
-            if (currentPos.y < -2.0f)
+            // 4. Morte por queda -- zona de morte BEM baixa para dar liberdade total
+            //    Mario e LIVRE para cair, explorar, errar
+            if (currentPos.y < -50f)
             {
-                AddReward(-10.0f);
+                AddReward(-3.0f);
                 EndEpisode();
                 return;
             }

@@ -45,9 +45,18 @@ namespace LibSM64
             foreach( var obj in GameObject.FindObjectsOfType<SM64StaticTerrain>())
             {
                 var mc = obj.GetComponent<MeshCollider>();
+                
+                // Null-safety: pular plataformas sem MeshCollider
+                if (mc == null || mc.sharedMesh == null)
+                {
+                    Debug.LogWarning($"[SM64] '{obj.gameObject.name}' sem MeshCollider - IGNORADA");
+                    continue;
+                }
+
                 transformAndGetSurfaces( surfaces, mc.sharedMesh, obj.SurfaceType, obj.TerrainType, x => mc.transform.TransformPoint( x ));
             }
 
+            Debug.Log($"[SM64] Superficies carregadas: {surfaces.Count} triangulos de {GameObject.FindObjectsOfType<SM64StaticTerrain>().Length} plataformas");
             return surfaces.ToArray();
         }
     }

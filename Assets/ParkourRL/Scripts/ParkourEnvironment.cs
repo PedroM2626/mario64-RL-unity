@@ -86,9 +86,9 @@ namespace ParkourRL
         }
 
         /// <summary>
-        /// Adiciona MeshCollider em TODOS os objetos que tem SM64StaticTerrain.
-        /// Sem MeshCollider, Utils.GetAllStaticSurfaces() faz NullReferenceException
-        /// e a superficie NAO e registrada no motor SM64.
+        /// Garante MeshCollider em todas as plataformas SM64StaticTerrain.
+        /// Nesta versao, os cubos sao GIGANTES e afundados (padrao pipescene),
+        /// as paredes ficam distantes e nao bloqueiam o Mario.
         /// </summary>
         private void EnsureAllMeshColliders()
         {
@@ -107,18 +107,13 @@ namespace ParkourRL
                         mc.sharedMesh = meshFilter.sharedMesh;
                         mc.convex = false;
                         fixed_count++;
-                        Debug.Log($"[ParkourEnv] Adicionado MeshCollider a '{terrain.gameObject.name}' " +
-                                  $"(pos={terrain.transform.position}, scale={terrain.transform.lossyScale})");
-                    }
-                    else
-                    {
-                        Debug.LogError($"[ParkourEnv] ERRO: '{terrain.gameObject.name}' tem SM64StaticTerrain mas SEM MeshFilter! " +
-                                       "O Mario nao enxerga esta plataforma!");
                     }
                 }
+                
+                Debug.Log($"[ParkourEnv] Terreno '{terrain.gameObject.name}' pos={terrain.transform.position} scale={terrain.transform.lossyScale} MC={(mc != null)}");
             }
             
-            Debug.Log($"[ParkourEnv] MeshColliders verificados: {terrains.Length} plataformas, {fixed_count} corrigidas");
+            Debug.Log($"[ParkourEnv] {terrains.Length} plataformas verificadas, {fixed_count} MeshColliders adicionados");
         }
 
         /// <summary>
@@ -176,7 +171,7 @@ namespace ParkourRL
                     clone.name = platform.name + $"_Env{i}";
                     clone.transform.localScale = platform.transform.localScale;
                     
-                    // CRITICO: Garantir MeshCollider no clone
+                    // Garantir MeshCollider no clone
                     if (clone.GetComponent<MeshCollider>() == null)
                     {
                         MeshFilter mf = clone.GetComponent<MeshFilter>();
