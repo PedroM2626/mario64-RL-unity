@@ -56,6 +56,11 @@ namespace LibSM64
             Interop.StaticSurfacesLoad( Utils.GetAllStaticSurfaces());
         }
 
+        static public int GetStaticSurfaceCount()
+        {
+            return Utils.GetAllStaticSurfaces().Length;
+        }
+
         static public void RegisterMario( SM64Mario mario )
         {
             ensureInstanceExists();

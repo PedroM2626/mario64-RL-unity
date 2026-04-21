@@ -19,7 +19,6 @@ namespace ParkourRL
         [Header("Observations")]
         [SerializeField] private int raycastCount = 8;
         [SerializeField] private float raycastDistance = 10f;
-        [SerializeField] private LayerMask terrainLayer;
 
         [HideInInspector] public Vector2 joystickInput;
         [HideInInspector] public bool jumpPressed;
@@ -29,10 +28,12 @@ namespace ParkourRL
 
         private Vector3 startPosition;
         private Vector3 previousPosition;
+        private float initialDistanceToGoal;
         private float previousDistanceToGoal;
         private float episodeTime;
         private float bestDistanceToGoal;
-        private const float MAX_EPISODE_TIME = 30f; // Reduzido de 60s para episodios mais rapidos
+
+        private const float MAX_EPISODE_TIME = 20f; // Episodio curto = aprendizado rapido
         
         // Cache array for Raycasts to prevent ALLOC_TEMP_MAIN leakage
         private RaycastHit[] raycastHitsCache = new RaycastHit[1];
@@ -41,8 +42,6 @@ namespace ParkourRL
         {
             if (marioComponent == null)
                 marioComponent = GetComponent<SM64Mario>();
-            if (environment == null)
-                environment = FindObjectOfType<ParkourEnvironment>();
 
             startPosition = transform.position;
         }
@@ -73,15 +72,17 @@ namespace ParkourRL
             kickPressed = false;
             stompPressed = false;
 
-            previousDistanceToGoal = GetDistanceToGoal();
-            bestDistanceToGoal = previousDistanceToGoal;
+            initialDistanceToGoal = GetDistanceToGoal();
+            previousDistanceToGoal = initialDistanceToGoal;
+            bestDistanceToGoal = initialDistanceToGoal;
             previousPosition = transform.position;
             episodeTime = 0f;
+
         }
 
         public override void CollectObservations(VectorSensor sensor)
         {
-            // Verificar se VectorObservationSize esta correto no BehaviorParameters
+            // Forcar VectorObservationSize correto
             var behaviorParams = GetComponent<Unity.MLAgents.Policies.BehaviorParameters>();
             if (behaviorParams != null && behaviorParams.BrainParameters.VectorObservationSize != 30)
             {
@@ -91,17 +92,17 @@ namespace ParkourRL
             Vector3 position = transform.position;
 
             // [3 obs] Posicao do Mario (normalizada)
-            sensor.AddObservation(position.x / 20f);
-            sensor.AddObservation(position.y / 20f);
-            sensor.AddObservation(position.z / 20f);
+            sensor.AddObservation(position.x / 25f);
+            sensor.AddObservation(position.y / 10f);
+            sensor.AddObservation(position.z / 25f);
 
-            // [4 obs] Posicao relativa ao objetivo
+            // [4 obs] Direcao e distancia ao objetivo
             if (targetGoal != null)
             {
                 Vector3 toGoal = targetGoal.position - position;
-                sensor.AddObservation(toGoal.x / 20f);
-                sensor.AddObservation(toGoal.y / 20f);
-                sensor.AddObservation(toGoal.z / 20f);
+                sensor.AddObservation(toGoal.x / 25f);
+                sensor.AddObservation(toGoal.y / 10f);
+                sensor.AddObservation(toGoal.z / 25f);
                 sensor.AddObservation(toGoal.magnitude / 30f);
             }
             else
@@ -112,18 +113,17 @@ namespace ParkourRL
                 sensor.AddObservation(0f);
             }
 
-            // [3 obs] Velocidade do Mario (calculada por delta de posicao)
+            // [3 obs] Velocidade do Mario
             Vector3 velocity = (position - previousPosition) / Mathf.Max(Time.fixedDeltaTime, 0.001f);
-            sensor.AddObservation(velocity.x / 10f);
-            sensor.AddObservation(velocity.y / 10f);
-            sensor.AddObservation(velocity.z / 10f);
+            sensor.AddObservation(Mathf.Clamp(velocity.x / 10f, -1f, 1f));
+            sensor.AddObservation(Mathf.Clamp(velocity.y / 10f, -1f, 1f));
+            sensor.AddObservation(Mathf.Clamp(velocity.z / 10f, -1f, 1f));
 
             // [1 obs] Esta no ar?
-            int groundCheck = Physics.RaycastNonAlloc(position + Vector3.up * 0.1f, Vector3.down, raycastHitsCache, 0.5f);
-            sensor.AddObservation(groundCheck == 0 ? 1f : 0f);
+            bool isGrounded = Physics.RaycastNonAlloc(position + Vector3.up * 0.1f, Vector3.down, raycastHitsCache, 0.5f) > 0;
+            sensor.AddObservation(isGrounded ? 0f : 1f);
 
-            // [16 obs] Raycasts para detectar terreno/obstaculos
-            // CORRECAO CRITICA: sem LayerMask (detecta TUDO) - antes usava terrainLayer que era 0 (nada)
+            // [16 obs] Raycasts para detectar terreno/obstaculos (sem layer mask)
             for (int i = 0; i < raycastCount; i++)
             {
                 float angle = (360f / raycastCount) * i;
@@ -132,118 +132,110 @@ namespace ParkourRL
                 if (Physics.RaycastNonAlloc(position + Vector3.up * 0.5f, direction, raycastHitsCache, raycastDistance) > 0)
                 {
                     sensor.AddObservation(raycastHitsCache[0].distance / raycastDistance);
-                    sensor.AddObservation(raycastHitsCache[0].point.y - position.y);
+                    sensor.AddObservation(Mathf.Clamp((raycastHitsCache[0].point.y - position.y) / 5f, -1f, 1f));
                 }
                 else
                 {
-                    sensor.AddObservation(1f);
+                    sensor.AddObservation(1f); // Nada detectado = distancia maxima
                     sensor.AddObservation(0f);
                 }
             }
 
-            // [1 obs] Altura do chao abaixo do Mario (sem LayerMask)
+            // [1 obs] Altura do chao abaixo
             if (Physics.RaycastNonAlloc(position + Vector3.up * 0.5f, Vector3.down, raycastHitsCache, 20f) > 0)
             {
                 sensor.AddObservation(raycastHitsCache[0].distance / 20f);
             }
             else
             {
-                sensor.AddObservation(1f);
+                sensor.AddObservation(1f); // Sem chao = caindo
             }
 
-            // [1 obs] Acoes atuais (esta pulando?)
+            // [1 obs] Jump button ativo
             sensor.AddObservation(jumpPressed ? 1f : 0f);
 
-            // [1 obs] Tempo restante (normalizado)
+            // [1 obs] Tempo normalizado
             sensor.AddObservation(episodeTime / MAX_EPISODE_TIME);
 
-            // Total: 3 + 4 + 3 + 1 + 16 + 1 + 1 + 1 = 30 observacoes
+            // Total: 3 + 4 + 3 + 1 + 16 + 1 + 1 + 1 = 30
         }
 
         public override void OnActionReceived(ActionBuffers actions)
         {
-            // Ações contínuas: joystick X, joystick Y
+            // Acoes continuas: joystick
             joystickInput = new Vector2(
                 Mathf.Clamp(actions.ContinuousActions[0], -1f, 1f),
                 Mathf.Clamp(actions.ContinuousActions[1], -1f, 1f)
             );
 
-            // Ações discretas: Jump, Kick, Stomp
+            // Acao discreta: apenas Jump (sem kick/stomp que causavam ground-pound)
             jumpPressed = actions.DiscreteActions[0] == 1;
-            kickPressed = actions.DiscreteActions[1] == 1;
-            stompPressed = actions.DiscreteActions[2] == 1;
+            kickPressed = false;
+            stompPressed = false;
 
-            // Log de debug (a cada 300 steps para nao floodar)
-            if (StepCount % 300 == 0)
-            {
-                Debug.Log($"[MarioRLAgent] Step {StepCount}: Dist={GetDistanceToGoal():F1}, Reward={GetCumulativeReward():F2}, Pos={transform.position}");
-            }
-
-            // Atualizar direcao da camera (apontar para o objetivo)
+            // Apontar camera para o goal (direcao do movimento)
             if (targetGoal != null)
             {
                 cameraLookDirection = (targetGoal.position - transform.position).normalized;
                 cameraLookDirection.y = 0;
+                if (cameraLookDirection.sqrMagnitude < 0.01f)
+                    cameraLookDirection = Vector3.forward;
             }
 
-            // === RECOMPENSAS ===
+            // ========== RECOMPENSAS RIGIDAS ==========
             episodeTime += Time.fixedDeltaTime;
             Vector3 currentPos = transform.position;
             float currentDistance = GetDistanceToGoal();
 
-            // 1. Recompensa por se aproximar do objetivo (principal driver)
+            // 1. Penalidade constante por step (pressao de tempo severa)
+            //    Com ~20s de episodio e DecisionPeriod=2, sao ~500 steps
+            //    Total: 500 * -0.01 = -5.0 se ficar parado
+            AddReward(-0.01f);
+
+            // 2. Recompensa por progresso real (delta de distancia)
+            //    So recompensa se REALMENTE se aproximou (delta > threshold)
             float distanceDelta = previousDistanceToGoal - currentDistance;
-            AddReward(distanceDelta * 0.2f);
-
-            // 2. Bonus por novo recorde de proximidade (incentiva progresso)
-            if (currentDistance < bestDistanceToGoal - 0.5f)
+            if (distanceDelta > 0.01f)
             {
-                AddReward(0.5f);
+                // Recompensa proporcional ao progresso real
+                AddReward(distanceDelta * 1.0f);
+            }
+
+            // 3. Bonus por marco de distancia (a cada 2 unidades mais perto)
+            if (currentDistance < bestDistanceToGoal - 2.0f)
+            {
+                float improvement = bestDistanceToGoal - currentDistance;
+                AddReward(2.0f); // Bonus grande por progresso significativo
                 bestDistanceToGoal = currentDistance;
-            }
-
-            // 3. Recompensa por estar no ar E se movendo em direcao ao goal
-            //    (incentiva pular em direcao a plataforma ao inves de ficar parado na borda)
-            int groundHits = Physics.RaycastNonAlloc(currentPos, Vector3.down, raycastHitsCache, 0.3f);
-            bool isAirborne = (groundHits == 0);
-            if (isAirborne && distanceDelta > 0)
-            {
-                // Mario esta subindo E se aproximando do goal = muito bom!
-                AddReward(0.1f);
-            }
-
-            // 4. Recompensa por velocidade horizontal (incentiva movimento, nao ficar parado)
-            float horizontalSpeed = new Vector2(currentPos.x - previousPosition.x, currentPos.z - previousPosition.z).magnitude / Time.fixedDeltaTime;
-            if (horizontalSpeed > 0.5f)
-            {
-                AddReward(0.001f); // Pequeno bonus por se mover
-            }
-
-            // 5. Penalidade por tempo (leve)
-            AddReward(-0.0005f);
-
-            // 6. Penalidade por ficar parado (anti-estagnacao)
-            float movedDist = Vector3.Distance(currentPos, previousPosition);
-            if (movedDist < 0.01f)
-            {
-                AddReward(-0.005f); // Penaliza ficar parado
+                Debug.Log($"[Mario] MARCO! Nova melhor distancia: {bestDistanceToGoal:F1} (delta: {improvement:F1})");
             }
 
             previousDistanceToGoal = currentDistance;
             previousPosition = currentPos;
 
-            // Verificar tempo maximo
-            if (episodeTime >= MAX_EPISODE_TIME)
+            // 4. Morte por queda (penalidade muito alta)
+            if (currentPos.y < -2.0f)
             {
-                AddReward(-0.5f);
+                AddReward(-10.0f);
                 EndEpisode();
+                return;
             }
 
-            // Verificar se caiu (penalidade reduzida para incentivar risco)
-            if (currentPos.y < -10f)
+            // 5. Timeout (penalidade alta)
+            if (episodeTime >= MAX_EPISODE_TIME)
             {
-                AddReward(-0.3f); // Era -1.0, reduzido para o agente nao ter tanto medo de cair
+                // Penalidade proporcional: quem nao fez progresso leva mais
+                float progressRatio = 1.0f - (currentDistance / Mathf.Max(initialDistanceToGoal, 0.1f));
+                AddReward(-5.0f + progressRatio * 3.0f); // -5 se zero progresso, -2 se quase la
                 EndEpisode();
+                return;
+            }
+
+            // Log periodico
+            if (StepCount % 500 == 0 && StepCount > 0)
+            {
+                Debug.Log($"[Mario] Step {StepCount}: Dist={currentDistance:F1}, Best={bestDistanceToGoal:F1}, " +
+                          $"Reward={GetCumulativeReward():F2}, Pos={currentPos}, Y={currentPos.y:F2}");
             }
         }
 
@@ -255,31 +247,25 @@ namespace ParkourRL
 
             var discreteActions = actionsOut.DiscreteActions;
             discreteActions[0] = Input.GetButton("Jump") ? 1 : 0;
-            discreteActions[1] = Input.GetButton("Kick") ? 1 : 0;
-            discreteActions[2] = Input.GetButton("Z") ? 1 : 0;
         }
 
         void Start()
         {
-            // Garantir que o input provider está presente (feito em Start para evitar conflito com Awake)
             if (GetComponent<MarioInputProvider>() == null)
             {
                 gameObject.AddComponent<MarioInputProvider>();
             }
-            
-            // Debug.Log("[MarioRLAgent] Inicializado - Target: " + (targetGoal != null ? targetGoal.name : "null"));
         }
         
         void FixedUpdate()
         {
-            // O ML-Agents Academy gerencia o ciclo de decisões automaticamente
-            // Verificar se Mario está preso (não se moveu nas últimas 500 steps)
-            if (StepCount > 0 && StepCount % 500 == 0)
+            // Deteccao de Mario preso
+            if (StepCount > 0 && StepCount % 300 == 0)
             {
                 float moved = Vector3.Distance(transform.position, startPosition);
-                if (moved < 1f)
+                if (moved < 0.5f)
                 {
-                    Debug.LogWarning($"[MarioRLAgent] Mario parece preso! Step {StepCount}, Pos: {transform.position}, Reward: {GetCumulativeReward():F2}");
+                    Debug.LogWarning($"[Mario] PRESO! Step {StepCount}, Pos: {transform.position}, CumReward: {GetCumulativeReward():F2}");
                 }
             }
         }
@@ -287,14 +273,18 @@ namespace ParkourRL
         private float GetDistanceToGoal()
         {
             if (targetGoal == null) return float.MaxValue;
-            return Vector3.Distance(transform.position, targetGoal.position);
+            // Distancia horizontal (XZ) para nao penalizar saltos verticais
+            Vector3 a = transform.position;
+            Vector3 b = targetGoal.position;
+            return Vector3.Distance(new Vector3(a.x, 0, a.z), new Vector3(b.x, 0, b.z));
         }
 
         void OnTriggerEnter(Collider other)
         {
             if (other.CompareTag("Goal"))
             {
-                AddReward(10f);
+                Debug.Log($"[Mario] ====== GOAL ATINGIDO! ====== Step: {StepCount}");
+                AddReward(50f); // Recompensa massiva pelo goal
                 EndEpisode();
             }
             else if (other.CompareTag("Checkpoint"))
@@ -303,8 +293,9 @@ namespace ParkourRL
                 if (checkpoint != null && !checkpoint.IsActivated)
                 {
                     checkpoint.Activate();
-                    AddReward(2f);
+                    AddReward(5f);
                     environment?.SetCheckpoint(checkpoint.transform.position);
+                    Debug.Log($"[Mario] Checkpoint atingido!");
                 }
             }
         }

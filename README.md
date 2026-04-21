@@ -1,44 +1,79 @@
 # libsm64-unity-dev
 
-This repo contains a Unity project that wraps the [libsm64-unity](https://github.com/libsm64/libsm64-unity) package so it can be easily worked on directly inside Unity without going through the package manager.
+Este repositorio contem um projeto Unity que wrapa o [libsm64-unity](https://github.com/libsm64/libsm64-unity) para treinar agentes de IA usando Reinforcement Learning em um ambiente de parkour do Super Mario 64.
 
-## Features
+## Setup Inicial
 
-- **LibSM64- **Vector Observation**:
-  - Space Size: `25` (posição 3 + objetivo 4 + raycasts 16 + ground 1 + tempo 1)**Parkour RL**: Ambiente de Reinforcement Learning para treinar IA no parkour (veja `Assets/ParkourRL/`)
-
-To get started:
-- Clone this repository, and recursively clone submodules:
+1. Clone este repositorio com submodulos:
     ```
     git clone https://github.com/libsm64/libsm64-unity-dev
-    cd libsm64-unity
+    cd libsm64-unity-dev
     git submodule update --init --recursive
     ```
-- Get a copy of the Super Mario 64 \[US\] z64 ROM (MD5 20b854b239203baf6c961b850a4a51a2)
-- Name the ROM `baserom.us.z64` and place it in the root folder of this repo/project
-- Open the project in Unity 2019.3.10+
-- Make sure you have a controller attached
-- Open the test scene `Assets/pipescene.unity`
-- Run the scene, make sure it's working, stop it, and start poking around.
+2. Obtenha uma copia da ROM US do Super Mario 64 (MD5 `20b854b239203baf6c961b850a4a51a2`)
+3. Nomeie como `baserom.us.z64` e coloque na raiz do projeto
+4. Abra o projeto no Unity 2019.3.10+
+5. Instale dependencias Python: `pip install -r requirements.txt`
 
 ## Parkour RL
 
-Para treinar um agente Mario usando Reinforcement Learning e seguindo príncipios de MLOps:
+Ambiente de Reinforcement Learning para treinar Mario a completar percursos de parkour.
 
-1. Veja `Assets/ParkourRL/README.md` para instruções completas
-2. Instale o pacote ML-Agents no Unity e as dependências: `pip install -r requirements.txt`
-3. Use o menu `Parkour RL > Setup Parkour Scene` para criar a cena
-4. O mario é iniciado via script `ParkourEnvironment.cs` e possui um `DecisionRequester`
+### Arquitetura
 
-### Treinamento MLOps (Recomendado)
-Para rastrear métricas, logs e modelos automaticamente no [MLflow](https://mlflow.org/):
+- **ParkourEnvironment.cs**: Orquestrador do ambiente. Instancia o Mario, gerencia resets de episodio e cria ambientes paralelos para treinamento acelerado.
+- **MarioRLAgent.cs**: Agente ML-Agents (PPO). Coleta 30 observacoes (posicao, velocidade, raycasts, etc.) e controla o Mario via joystick + botoes.
+- **MarioInputProvider.cs**: Ponte entre as acoes do agente RL e o motor SM64.
+- **SM64Mario.cs**: Wrapper nativo que comunica com a DLL do SM64.
+
+### Treinamento Multi-Mario Paralelo
+
+O sistema treina **4 Marios simultaneamente** na mesma cena, cada um em sua copia do percurso. Todos compartilham o mesmo cerebro neural (`MarioParkour`), acelerando o treinamento sem precisar de `TimeScale` alto.
+
+Para treinar:
+```powershell
+# Terminal 1: Iniciar o trainer
+mlagents-learn Assets/ParkourRL/Config/mario_parkour.yaml --run-id parkour_v1
+
+# Terminal 2: Abrir a cena ParkourRL/Scenes/ParkourTraining.unity e dar Play
+```
+
+### Configuracao do nivel
+
+O nivel atual consiste em 4 plataformas com gaps de 1.5-2 unidades, todas no mesmo nivel Y (acessiveis pelo pulo padrao do SM64 Mario). O Goal fica na ultima plataforma com um trigger collider grande para facilitar deteccao.
+
+| Plataforma    | Posicao       | Escala    | Gap anterior |
+|---------------|---------------|-----------|--------------|
+| StartPlatform | (0, -0.5, 0)  | 6x1x6     | -            |
+| Platform_1    | (5, -0.5, 0)  | 3x1x3     | ~2 unidades  |
+| Platform_2    | (9.5, -0.5, 0)| 3x1x3     | ~1.5 unidades|
+| Platform_3    | (14, 0, 0)    | 3x1x3     | ~2 unidades  |
+| GoalPlatform  | (19, 0, 0)    | 5x1x5     | ~2 unidades  |
+
+### MLOps (MLflow)
+
+Para rastrear metricas, logs e modelos automaticamente:
 ```powershell
 python trainer_mlflow.py --run-id mario_parkour_run1
 ```
-Isso aciona o `mlagents-learn` por trás dos panos e registra o experimento no MLflow. Após treinar, visualize o painel usando `mlflow ui`.
+Visualize o painel: `mlflow ui`
 
-### Como rodar em Docker 
-Para utilizar o ambiente do ML-Agents em qualquer lugar (com Python 3.9) sem poluir sua máquina local, o repositório acompanha um `Dockerfile`.
-1. Faça build da imagem: `docker build -t mariorl:latest .`
-2. Rode o container para chamar o MLOps Tracker: `docker run -it --rm -v ${PWD}/results:/app/results mariorl:latest python trainer_mlflow.py --run-id dockerrun`
-(Use os devidos bindings no comando se houver o editor linkado).
+### Docker
+
+```bash
+docker build -t mariorl:latest .
+docker run -it --rm -v ${PWD}/results:/app/results mariorl:latest python trainer_mlflow.py --run-id dockerrun
+```
+
+### Observacoes do Agente (30 dims)
+
+| Observacao                 | Dims | Range       |
+|----------------------------|------|-------------|
+| Posicao normalizada        | 3    | [-1, 1]     |
+| Direcao ao goal            | 4    | [-1, 1]     |
+| Velocidade                 | 3    | [-1, 1]     |
+| No ar?                     | 1    | {0, 1}      |
+| Raycasts (8 direcoes x 2)  | 16   | [0, 1]      |
+| Altura do chao             | 1    | [0, 1]      |
+| Pulando?                   | 1    | {0, 1}      |
+| Tempo restante             | 1    | [0, 1]      |
