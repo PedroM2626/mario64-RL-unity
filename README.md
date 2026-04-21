@@ -4,8 +4,8 @@ This repo contains a Unity project that wraps the [libsm64-unity](https://github
 
 ## Features
 
-- **LibSM64 Unity Integration**: Mario 64 controller and physics in Unity
-- **Parkour RL**: Ambiente de Reinforcement Learning para treinar IA no parkour (veja `Assets/ParkourRL/`)
+- **LibSM64- **Vector Observation**:
+  - Space Size: `25` (posição 3 + objetivo 4 + raycasts 16 + ground 1 + tempo 1)**Parkour RL**: Ambiente de Reinforcement Learning para treinar IA no parkour (veja `Assets/ParkourRL/`)
 
 To get started:
 - Clone this repository, and recursively clone submodules:
@@ -23,11 +23,22 @@ To get started:
 
 ## Parkour RL
 
-Para treinar um agente Mario usando Reinforcement Learning:
+Para treinar um agente Mario usando Reinforcement Learning e seguindo príncipios de MLOps:
 
 1. Veja `Assets/ParkourRL/README.md` para instruções completas
-2. Instale o pacote ML-Agents no Unity
-3. Instale as dependências Python: `pip install -r requirements.txt`
-4. Use o menu `Parkour RL > Setup Parkour Scene` para criar a cena automaticamente
-5. Configure o Behavior Parameters no prefab do Mario
-6. Inicie o treinamento: `mlagents-learn Assets/ParkourRL/Config/mario_parkour.yaml --run-id=mario_parkour_v1`
+2. Instale o pacote ML-Agents no Unity e as dependências: `pip install -r requirements.txt`
+3. Use o menu `Parkour RL > Setup Parkour Scene` para criar a cena
+4. O mario é iniciado via script `ParkourEnvironment.cs` e possui um `DecisionRequester`
+
+### Treinamento MLOps (Recomendado)
+Para rastrear métricas, logs e modelos automaticamente no [MLflow](https://mlflow.org/):
+```powershell
+python trainer_mlflow.py --run-id mario_parkour_run1
+```
+Isso aciona o `mlagents-learn` por trás dos panos e registra o experimento no MLflow. Após treinar, visualize o painel usando `mlflow ui`.
+
+### Como rodar em Docker 
+Para utilizar o ambiente do ML-Agents em qualquer lugar (com Python 3.9) sem poluir sua máquina local, o repositório acompanha um `Dockerfile`.
+1. Faça build da imagem: `docker build -t mariorl:latest .`
+2. Rode o container para chamar o MLOps Tracker: `docker run -it --rm -v ${PWD}/results:/app/results mariorl:latest python trainer_mlflow.py --run-id dockerrun`
+(Use os devidos bindings no comando se houver o editor linkado).

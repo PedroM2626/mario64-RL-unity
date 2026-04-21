@@ -3,39 +3,57 @@ using LibSM64;
 
 namespace ParkourRL
 {
-    [RequireComponent(typeof(MarioRLAgent))]
     public class MarioInputProvider : SM64InputProvider
     {
         private MarioRLAgent agent;
 
         void Awake()
         {
-            agent = GetComponent<MarioRLAgent>();
+            // Não buscar aqui - fazer lazy no primeiro uso
+            // O MarioRLAgent pode ser adicionado depois deste componente
+        }
+        
+        MarioRLAgent GetAgent()
+        {
+            if (agent == null)
+                agent = GetComponent<MarioRLAgent>();
+            return agent;
         }
 
         public override Vector3 GetCameraLookDirection()
         {
-            if (agent != null)
-                return agent.cameraLookDirection.normalized;
+            var a = GetAgent();
+            if (a != null)
+                return a.cameraLookDirection.normalized;
             return Vector3.forward;
         }
 
         public override Vector2 GetJoystickAxes()
         {
-            if (agent != null)
-                return agent.joystickInput;
+            var a = GetAgent();
+            if (a != null)
+            {
+                Vector2 input = a.joystickInput;
+                // Log quando há input significativo (para debug de movimento)
+                if (input.magnitude > 0.5f && Time.frameCount % 60 == 0)
+                {
+                    Debug.Log($"[MarioInput] Enviando input: {input}");
+                }
+                return input;
+            }
             return Vector2.zero;
         }
 
         public override bool GetButtonHeld(Button button)
         {
-            if (agent == null) return false;
+            var a = GetAgent();
+            if (a == null) return false;
 
             switch (button)
             {
-                case Button.Jump: return agent.jumpPressed;
-                case Button.Kick: return agent.kickPressed;
-                case Button.Stomp: return agent.stompPressed;
+                case Button.Jump: return a.jumpPressed;
+                case Button.Kick: return a.kickPressed;
+                case Button.Stomp: return a.stompPressed;
                 default: return false;
             }
         }

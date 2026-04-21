@@ -1,14 +1,43 @@
+default_settings:
+  trainer_type: ppo
+  hyperparameters:
+    batch_size: 2048
+    buffer_size: 20480
+    learning_rate: 0.0003
+    learning_rate_schedule: linear
+    beta: 0.01
+    epsilon: 0.2
+    lambd: 0.95
+    num_epoch: 3
+  network_settings:
+    normalize: true
+    hidden_units: 256
+    num_layers: 2
+  reward_signals:
+    extrinsic:
+      gamma: 0.995
+      strength: 1.0
+  checkpoint_interval: 500000
+  max_steps: 10000000
+  time_horizon: 256
+  summary_freq: 50000
+  threaded: true
+
 behaviors:
   MarioParkour:
     trainer_type: ppo
 
     hyperparameters:
-      batch_size: 1024
-      buffer_size: 10240
+      # Buffer maior para mais estabilidade
+      batch_size: 2048
+      buffer_size: 20480
       learning_rate: 0.0003
       learning_rate_schedule: linear
 
-      beta: 0.005
+      # Beta ALTO = mais entropia = mais exploracao
+      # O agente vai experimentar acoes novas (como pular) ao inves de
+      # convergir prematuramente para comportamento seguro (ficar parado)
+      beta: 0.02
       epsilon: 0.2
       lambd: 0.95
       num_epoch: 3
@@ -20,13 +49,22 @@ behaviors:
 
     reward_signals:
       extrinsic:
-        gamma: 0.99
+        # Gamma alto = agente valoriza recompensas futuras (como o +10 do goal)
+        gamma: 0.995
         strength: 1.0
+      # Curiosidade: incentiva o agente a explorar estados novos
+      curiosity:
+        gamma: 0.99
+        strength: 0.02
+        encoding_size: 128
+        learning_rate: 0.0003
 
     checkpoint_interval: 500000
     max_steps: 10000000
-    time_horizon: 128
-    summary_freq: 50000
+    # Time horizon maior = agente consegue "ver" consequencias mais distantes
+    # Isso permite que ele entenda: pular agora -> cair na plataforma -> +10 reward
+    time_horizon: 512
+    summary_freq: 10000
 
     threaded: true
 
@@ -34,7 +72,7 @@ engine_settings:
   width: 1280
   height: 720
   quality_level: 2
-  time_scale: 10.0
+  time_scale: 20.0
   target_frame_rate: -1
   capture_frame_rate: 60
   no_graphics: false

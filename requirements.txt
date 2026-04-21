@@ -1,5 +1,5 @@
 # Unity ML-Agents
-mlagents==0.30.0
+mlagents==0.28.0
 
 # Dependências ML-Agents
 numpy>=1.21.0
@@ -12,3 +12,6 @@ protobuf>=3.19.0,<4.0.0
 
 # Utilitários
 pyyaml>=5.4.0
+
+# MLOps
+mlflow>=2.0.0

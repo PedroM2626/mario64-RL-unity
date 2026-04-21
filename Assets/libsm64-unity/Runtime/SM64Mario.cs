@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using UnityEngine;
 
 namespace LibSM64
@@ -32,7 +32,14 @@ namespace LibSM64
 
             inputProvider = GetComponent<SM64InputProvider>();
             if( inputProvider == null )
+            {
+                Debug.LogError("[SM64Mario] InputProvider não encontrado!");
                 throw new System.Exception("Need to add an input provider component to Mario");
+            }
+            if (inputProvider.GetType().Name != "MarioInputProvider")
+            {
+                Debug.LogWarning($"[SM64Mario] InputProvider é {inputProvider.GetType().Name}, esperado: MarioInputProvider");
+            }
 
             marioRendererObject = new GameObject("MARIO");
             marioRendererObject.hideFlags |= HideFlags.HideInHierarchy;
@@ -45,8 +52,12 @@ namespace LibSM64
                 new Interop.SM64MarioState()
             };
 
-            renderer.material = material;
-            renderer.sharedMaterial.SetTexture("_MainTex", Interop.marioTexture);
+            if (material != null)
+            {
+                renderer.material = material;
+                if (renderer.sharedMaterial != null)
+                    renderer.sharedMaterial.SetTexture("_MainTex", Interop.marioTexture);
+            }
 
             marioRendererObject.transform.localScale = new Vector3( -1, 1, 1 ) / Interop.SCALE_FACTOR;
             marioRendererObject.transform.localPosition = Vector3.zero;
@@ -60,6 +71,7 @@ namespace LibSM64
             uvBuffer = new Vector2[3 * Interop.SM64_GEO_MAX_TRIANGLES];
 
             marioMesh = new Mesh();
+            marioMesh.MarkDynamic();
             marioMesh.vertices = lerpPositionBuffer;
             marioMesh.triangles = Enumerable.Range(0, 3*Interop.SM64_GEO_MAX_TRIANGLES).ToArray();
             meshFilter.sharedMesh = marioMesh;
@@ -72,6 +84,12 @@ namespace LibSM64
                 Destroy( marioRendererObject );
                 marioRendererObject = null;
             }
+            
+            if( marioMesh != null )
+            {
+                Destroy( marioMesh );
+                marioMesh = null;
+            }
 
             if( Interop.isGlobalInit )
             {
@@ -80,14 +98,42 @@ namespace LibSM64
             }
         }
 
+        public void Teleport(Vector3 newPos)
+        {
+            // Apaga a instância nativa velha
+            if( Interop.isGlobalInit ) {
+                Interop.MarioDelete(marioId);
+            }
+            
+            // Recria a instância nativa na nova posição
+            marioId = Interop.MarioCreate( new Vector3( -newPos.x, newPos.y, newPos.z ) * Interop.SCALE_FACTOR );
+
+            // Limpa os estados de transição
+            states[0] = new Interop.SM64MarioState();
+            states[1] = new Interop.SM64MarioState();
+            buffIndex = 0;
+            
+            // Atualiza a posição inicial instantaneamente visualmente
+            transform.position = newPos;
+        }
+
         public void contextFixedUpdate()
         {
+            // Proteção contra null durante ciclo de vida
+            if (inputProvider == null || states == null || positionBuffers == null)
+                return;
+                
             var inputs = new Interop.SM64MarioInputs();
             var look = inputProvider.GetCameraLookDirection();
+            var joystick = inputProvider.GetJoystickAxes();
+            
+            // Debug: logar apenas quando há input significativo (evita flood)
+            if (joystick.magnitude > 0.1f && Time.frameCount % 60 == 0)
+            {
+                Debug.Log($"[SM64Mario] Input ativo - Joystick: {joystick}");
+            }
             look.y = 0;
             look = look.normalized;
-
-            var joystick = inputProvider.GetJoystickAxes();
 
             inputs.camLookX = -look.x;
             inputs.camLookZ = look.z;
@@ -102,14 +148,15 @@ namespace LibSM64
             for( int i = 0; i < colorBuffer.Length; ++i )
                 colorBufferColors[i] = new Color( colorBuffer[i].x, colorBuffer[i].y, colorBuffer[i].z, 1 );
 
-            marioMesh.colors = colorBufferColors;
-            marioMesh.uv = uvBuffer;
-
             buffIndex = 1 - buffIndex;
         }
 
         public void contextUpdate()
         {
+            // Proteção contra null durante ciclo de vida
+            if (lerpPositionBuffer == null || states == null)
+                return;
+                
             float t = (Time.time - Time.fixedTime) / Time.fixedDeltaTime;
             int j = 1 - buffIndex;
 
@@ -123,9 +170,13 @@ namespace LibSM64
 
             marioMesh.vertices = lerpPositionBuffer;
             marioMesh.normals = lerpNormalBuffer;
+            
+            // As atualizações de Colors e UVs ficam no Update visual para não estourar o TLS Allocator no Unity ML-Agents (TimeScale alto)
+            marioMesh.colors = colorBufferColors;
+            marioMesh.uv = uvBuffer;
 
             marioMesh.RecalculateBounds();
-            marioMesh.RecalculateTangents();
+            // marioMesh.RecalculateTangents(); // Desabilitado para evitar vazamentos ALLOC_TEMP_MAIN (Desnecessário sem Normal Map)
         }
 
         void OnDrawGizmos()

@@ -79,23 +79,31 @@ namespace ParkourRL
                     }
                 }
             }
-            Debug.Log($"[ParkourEnvironment] Added {addedCount} colliders to terrain objects");
+            // Debug.Log($"[ParkourEnvironment] Added {addedCount} colliders to terrain objects");
         }
 
         void Start()
         {
             // Atualizar terreno após adicionar MeshColliders
             SM64Context.RefreshStaticTerrain();
+            // Debug.Log("[ParkourEnvironment] Static terrain refreshed");
             
-            // Delay para garantir que o SM64Context processou o terreno
-            Invoke(nameof(SpawnMario), 0.1f);
+            // Delay maior para garantir que o SM64Context processou o terreno completamente
+            Invoke(nameof(SpawnMario), 0.5f);
         }
 
+        private bool justSpawned = false;
+        
         public void ResetEnvironment()
         {
             ResetCheckpoints();
             RandomizeLevel();
-            RespawnMario();
+            // Evitar recriar Mario se acabou de ser criado (previne loop no inicio)
+            if (!justSpawned)
+            {
+                RespawnMario();
+            }
+            justSpawned = false;
         }
 
         public void SetCheckpoint(Vector3 position)
@@ -160,82 +168,111 @@ namespace ParkourRL
                 }
             }
 
-            Vector3 spawnPos = currentSpawnPoint;
-            currentMario = Instantiate(marioPrefab, spawnPos, Quaternion.identity);
-            currentMario.name = "MarioRL";
-
-            SM64Mario sm64Mario = currentMario.GetComponent<SM64Mario>();
-
-            // ETAPA 1: Desabilitar SM64Mario (se estiver habilitado) para parar de usar o input antigo
-            if (sm64Mario != null && sm64Mario.enabled)
+            Vector3 spawnPos = currentSpawnPoint + Vector3.up * 2f;
+            
+            // Criar objeto vazio - IMPORTANTE: ordem dos componentes é crítica!
+            currentMario = new GameObject("MarioRL");
+            currentMario.SetActive(false); // Inativa para não rodar OnEnable do SM64Mario prematuramente
+            currentMario.transform.position = spawnPos;
+            
+            // ETAPA 1: Adicionar agente RL PRIMEIRO (MarioInputProvider vai precisar dele)
+            MarioRLAgent agent = currentMario.AddComponent<MarioRLAgent>();
+            
+            // ETAPA 2: Adicionar input provider (vai encontrar MarioRLAgent lazy)
+            currentMario.AddComponent<MarioInputProvider>();
+            
+            // ETAPA 3: Adicionar SM64Mario (vai encontrar MarioInputProvider no OnEnable)
+            SM64Mario sm64Mario = currentMario.AddComponent<SM64Mario>();
+            
+            // ETAPA 4: Configurar material (copiar do prefab ou usar o assignado)
+            Material matToUse = marioMaterial;
+            if (matToUse == null)
             {
-                sm64Mario.enabled = false;
+                SM64Mario prefabMario = marioPrefab.GetComponent<SM64Mario>();
+                if (prefabMario != null)
+                {
+                    System.Reflection.FieldInfo matField = typeof(SM64Mario).GetField("material", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    if (matField != null)
+                        matToUse = matField.GetValue(prefabMario) as Material;
+                }
             }
-
-            // ETAPA 2: Configurar material
-            if (marioMaterial != null && sm64Mario != null)
+            Debug.Log($"[ParkourEnvironment] Material obtido: {matToUse?.name ?? "NULL"}");
+            if (matToUse != null)
             {
                 System.Reflection.FieldInfo materialField = typeof(SM64Mario).GetField("material", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 if (materialField != null)
-                    materialField.SetValue(sm64Mario, marioMaterial);
+                {
+                    materialField.SetValue(sm64Mario, matToUse);
+                    Debug.Log($"[ParkourEnvironment] Material aplicado via reflection: {matToUse.name}");
+                }
+                else
+                {
+                    Debug.LogError("[ParkourEnvironment] Field 'material' não encontrado no SM64Mario!");
+                }
             }
-
-            // ETAPA 3: Remover input provider manual IMEDIATAMENTE
-            var oldInput = currentMario.GetComponent<ExampleInputProvider>();
-            if (oldInput != null)
+            else
             {
-                DestroyImmediate(oldInput);
-                Debug.Log("[ParkourEnvironment] ExampleInputProvider removido");
+                Debug.LogError("[ParkourEnvironment] Material é NULL! Mario vai aparecer rosa.");
             }
 
-            // ETAPA 4: Adicionar input provider RL
-            MarioInputProvider inputProvider = currentMario.GetComponent<MarioInputProvider>();
-            if (inputProvider == null)
-            {
-                inputProvider = currentMario.AddComponent<MarioInputProvider>();
-                Debug.Log("[ParkourEnvironment] MarioInputProvider adicionado");
-            }
-
-            // ETAPA 5: Adicionar agente RL
-            MarioRLAgent agent = currentMario.GetComponent<MarioRLAgent>();
-            if (agent == null)
-                agent = currentMario.AddComponent<MarioRLAgent>();
-
-            // ETAPA 6: Configurar Behavior Parameters para ML-Agents
-            Unity.MLAgents.Policies.BehaviorParameters behaviorParams = currentMario.GetComponent<Unity.MLAgents.Policies.BehaviorParameters>();
-            if (behaviorParams == null)
+            // ETAPA 5: Configurar Behavior Parameters (Usar GetComponent pois Agent já adiciona via RequireComponent)
+            var behaviorParams = currentMario.GetComponent<Unity.MLAgents.Policies.BehaviorParameters>();
+            if (behaviorParams == null) 
             {
                 behaviorParams = currentMario.AddComponent<Unity.MLAgents.Policies.BehaviorParameters>();
-                behaviorParams.BehaviorName = "MarioParkour";
-                
-                // Configurar observações (26 valores)
-                behaviorParams.BrainParameters.VectorObservationSize = 26;
-                behaviorParams.BrainParameters.NumStackedVectorObservations = 1;
-                
-                // Configurar ações: 2 contínuas (joystick X, Y) + 3 discretas (Jump, Kick, Stomp) com 2 opções cada
-                behaviorParams.BrainParameters.ActionSpec = new Unity.MLAgents.Actuators.ActionSpec(2, new int[] { 2, 2, 2 });
             }
+            
+            behaviorParams.BehaviorName = "MarioParkour";
+            behaviorParams.BehaviorType = Unity.MLAgents.Policies.BehaviorType.Default;
+            
+            // DEBUG: Verificar valor antes e depois
+            Debug.Log($"[ParkourEnvironment] Configurando BehaviorParameters...");
+            behaviorParams.BrainParameters.VectorObservationSize = 30;
+            behaviorParams.BrainParameters.NumStackedVectorObservations = 1;
+            behaviorParams.BrainParameters.ActionSpec = new Unity.MLAgents.Actuators.ActionSpec(2, new int[] { 2, 2, 2 });
+            Debug.Log($"[ParkourEnvironment] BehaviorParameters configurados: VectorObservationSize={behaviorParams.BrainParameters.VectorObservationSize}");
+
+            // ETAPA 6: Adicionar Decision Requester (SE ISSO FALTAR, O AGENTE TRAVA NOS MESMOS MOVIMENTOS)
+            var decisionRequester = currentMario.GetComponent<Unity.MLAgents.DecisionRequester>();
+            if (decisionRequester == null)
+            {
+                decisionRequester = currentMario.AddComponent<Unity.MLAgents.DecisionRequester>();
+            }
+            decisionRequester.DecisionPeriod = 2; // Reduzido de 5 para permitir timing de pulo
+            decisionRequester.TakeActionsBetweenDecisions = true;
 
             agent.SetEnvironment(this);
             if (goal != null)
                 agent.SetTargetGoal(goal);
-
-            // ETAPA 7: SÓ AGORA reabilitar SM64Mario (ele vai encontrar o MarioInputProvider)
-            if (sm64Mario != null)
-            {
-                sm64Mario.enabled = true;
-                Debug.Log("[ParkourEnvironment] SM64Mario habilitado com novo input provider");
-            }
+                
+            // Ativa o objeto, permitindo que Awake/OnEnable executem com as refs corretas (material preenchido)
+            currentMario.SetActive(true);
+            justSpawned = true;
+            Debug.Log("[ParkourEnvironment] SpawnMario completo. justSpawned=true");
         }
 
         private void RespawnMario()
         {
             if (currentMario != null)
             {
-                Destroy(currentMario);
+                currentSpawnPoint = marioSpawnPoint != null ? marioSpawnPoint.position : Vector3.zero;
+                
+                // Reinicia a física do SM64 para forçar o respawn no novo local
+                SM64Mario sm64Mario = currentMario.GetComponent<SM64Mario>();
+                if (sm64Mario != null)
+                {
+                    sm64Mario.Teleport(currentSpawnPoint + Vector3.up * 2f); // Usa a rotina nova que NÃO destrói Meshes e previne leaks
+                }
+                else
+                {
+                    currentMario.transform.position = currentSpawnPoint + Vector3.up * 2f;
+                }
             }
-            currentSpawnPoint = marioSpawnPoint != null ? marioSpawnPoint.position : Vector3.zero;
-            SpawnMario();
+            else
+            {
+                currentSpawnPoint = marioSpawnPoint != null ? marioSpawnPoint.position : Vector3.zero;
+                SpawnMario();
+            }
         }
 
         void OnDrawGizmos()
