@@ -27,6 +27,8 @@ namespace ParkourRL
 
         private Vector3 currentSpawnPoint;
         private GameObject currentMario;
+        private Vector3 originalSpawnPosition;
+        private Vector3 originalGoalPosition;
         private Vector3[] originalPlatformPositions;
         
         private List<ParallelEnvInstance> parallelInstances = new List<ParallelEnvInstance>();
@@ -45,6 +47,9 @@ namespace ParkourRL
         void Awake()
         {
             currentSpawnPoint = marioSpawnPoint != null ? marioSpawnPoint.position : Vector3.zero;
+            originalSpawnPosition = currentSpawnPoint;
+            if (goal != null)
+                originalGoalPosition = goal.position;
 
             // Salvar posicoes originais
             if (platformSpawnPoints != null && platformSpawnPoints.Count > 0)
@@ -212,7 +217,8 @@ namespace ParkourRL
                 envScript.goal = goalClone != null ? goalClone.transform : null;
                 envScript.marioPrefab = this.marioPrefab;
                 envScript.marioMaterial = this.marioMaterial;
-                envScript.randomizePlatforms = false;
+                envScript.randomizePlatforms = this.randomizePlatforms;
+                envScript.platformRandomizationRange = this.platformRandomizationRange;
                 
                 parallelInstances.Add(new ParallelEnvInstance
                 {
@@ -229,11 +235,40 @@ namespace ParkourRL
         public void ResetEnvironment()
         {
             ResetCheckpoints();
+            
+            // Randomiza levemente o Ponto de Spawn e o Goal para cada episodio!
+            // Isso evita "decorar" comandos de joystick.
+            if (randomizePlatforms)
+            {
+                RandomizeSpawnAndGoal();
+            }
+
             if (!justSpawned)
             {
                 RespawnMario();
             }
             justSpawned = false;
+        }
+
+        private void RandomizeSpawnAndGoal()
+        {
+            // Randomiza levemente as posicoes em X e Z dentro do platformRandomizationRange
+            float range = platformRandomizationRange > 0 ? platformRandomizationRange : 1.5f;
+
+            if (marioSpawnPoint != null)
+            {
+                float offsetX = UnityEngine.Random.Range(-range, range);
+                float offsetZ = UnityEngine.Random.Range(-range, range);
+                // Atualizamos apenas o currentSpawnPoint (para nao mover fisicamente o cubo, apenas onde o mario cai)
+                currentSpawnPoint = originalSpawnPosition + new Vector3(offsetX, 0, offsetZ);
+            }
+
+            if (goal != null)
+            {
+                float offsetX = UnityEngine.Random.Range(-range, range);
+                float offsetZ = UnityEngine.Random.Range(-range, range);
+                goal.position = originalGoalPosition + new Vector3(offsetX, 0, offsetZ);
+            }
         }
 
         public void SetCheckpoint(Vector3 position)

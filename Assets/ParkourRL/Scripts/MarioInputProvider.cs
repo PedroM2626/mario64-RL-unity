@@ -6,56 +6,68 @@ namespace ParkourRL
     public class MarioInputProvider : SM64InputProvider
     {
         private MarioRLAgent agent;
+        private MarioCompetitiveAgent competitiveAgent;
 
         void Awake()
         {
-            // Não buscar aqui - fazer lazy no primeiro uso
-            // O MarioRLAgent pode ser adicionado depois deste componente
+            // Lazy init no primeiro uso
         }
         
-        MarioRLAgent GetAgent()
+        private void FindAgents()
         {
             if (agent == null)
                 agent = GetComponent<MarioRLAgent>();
-            return agent;
+            if (competitiveAgent == null)
+                competitiveAgent = GetComponent<MarioCompetitiveAgent>();
         }
 
         public override Vector3 GetCameraLookDirection()
         {
-            var a = GetAgent();
-            if (a != null)
-                return a.cameraLookDirection.normalized;
+            FindAgents();
+            if (agent != null)
+                return agent.cameraLookDirection.normalized;
+            if (competitiveAgent != null)
+                return competitiveAgent.cameraLookDirection.normalized;
             return Vector3.forward;
         }
 
         public override Vector2 GetJoystickAxes()
         {
-            var a = GetAgent();
-            if (a != null)
-            {
-                Vector2 input = a.joystickInput;
-                // Log quando há input significativo (para debug de movimento)
-                if (input.magnitude > 0.5f && Time.frameCount % 60 == 0)
-                {
-                    Debug.Log($"[MarioInput] Enviando input: {input}");
-                }
-                return input;
-            }
+            FindAgents();
+            if (agent != null)
+                return agent.joystickInput;
+            if (competitiveAgent != null)
+                return competitiveAgent.joystickInput;
             return Vector2.zero;
         }
 
         public override bool GetButtonHeld(Button button)
         {
-            var a = GetAgent();
-            if (a == null) return false;
+            FindAgents();
 
-            switch (button)
+            if (agent != null)
             {
-                case Button.Jump: return a.jumpPressed;
-                case Button.Kick: return a.kickPressed;
-                case Button.Stomp: return a.stompPressed;
-                default: return false;
+                switch (button)
+                {
+                    case Button.Jump: return agent.jumpPressed;
+                    case Button.Kick: return agent.kickPressed;
+                    case Button.Stomp: return agent.stompPressed;
+                    default: return false;
+                }
             }
+
+            if (competitiveAgent != null)
+            {
+                switch (button)
+                {
+                    case Button.Jump: return competitiveAgent.jumpPressed;
+                    case Button.Kick: return competitiveAgent.kickPressed;
+                    case Button.Stomp: return competitiveAgent.stompPressed;
+                    default: return false;
+                }
+            }
+
+            return false;
         }
     }
 }
