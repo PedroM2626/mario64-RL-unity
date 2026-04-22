@@ -1,0 +1,32 @@
+{
+    "level_difficulty": {
+        "lesson_num": 0
+    },
+    "My Behavior": {
+        "checkpoints": [
+            {
+                "steps": 0,
+                "file_path": "results\\mario_parkour_v8\\My Behavior\\My Behavior-0.onnx",
+                "reward": null,
+                "creation_time": 1776740299.654986,
+                "auxillary_file_paths": [
+                    "results\\mario_parkour_v8\\My Behavior\\My Behavior-0.pt"
+                ]
+            }
+        ],
+        "final_checkpoint": {
+            "steps": 0,
+            "file_path": "results\\mario_parkour_v8\\My Behavior.onnx",
+            "reward": null,
+            "creation_time": 1776740299.654986,
+            "auxillary_file_paths": [
+                "results\\mario_parkour_v8\\My Behavior\\My Behavior-0.pt"
+            ]
+        }
+    },
+    "metadata": {
+        "stats_format_version": "0.3.0",
+        "mlagents_version": "0.28.0",
+        "torch_version": "2.4.1+cpu"
+    }
+}

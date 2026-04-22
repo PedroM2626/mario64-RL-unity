@@ -213,11 +213,11 @@ namespace ParkourRL
             previousDistanceToGoal = currentDistance;
             previousPosition = currentPos;
 
-            // 4. Morte por queda -- zona de morte BEM baixa para dar liberdade total
-            //    Mario e LIVRE para cair, explorar, errar
-            if (currentPos.y < -50f)
+            // 4. Morte por queda -- Dinamico para grandes alturas
+            //    Se o Mario cair 3 unidades abaixo de onde spawnou (saiu da plataforma), morre.
+            if (currentPos.y < startPosition.y - 3.0f)
             {
-                AddReward(-3.0f);
+                AddReward(-5.0f); // Forte punicao por cair
                 EndEpisode();
                 return;
             }

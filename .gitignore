@@ -79,12 +79,11 @@ __pycache__/
 .ipynb_checkpoints/
 
 # Training/experiment artifacts
-results/
 mlruns/
 wandb/
 runs/
 checkpoints/
-*.onnx
+
 
 # OS clutter
 .DS_Store

@@ -1,0 +1,68 @@
+{
+    "name": "root",
+    "metadata": {
+        "timer_format_version": "0.1.0",
+        "start_time_seconds": "1776736939",
+        "python_version": "3.8.10 (tags/v3.8.10:3d8993a, May  3 2021, 11:48:03) [MSC v.1928 64 bit (AMD64)]",
+        "command_line_arguments": "C:\\Users\\pedro\\Downloads\\libsm64-unity-dev-master\\venv_mlagents\\Scripts\\mlagents-learn Assets/ParkourRL/Config/mario_parkour.yaml --run-id=mario_parkour_v2 --force",
+        "mlagents_version": "0.28.0",
+        "mlagents_envs_version": "0.28.0",
+        "communication_protocol_version": "1.5.0",
+        "pytorch_version": "2.4.1+cpu",
+        "numpy_version": "1.21.0",
+        "end_time_seconds": "1776737072"
+    },
+    "total": 133.8994033,
+    "count": 1,
+    "self": 0.034093799999993735,
+    "children": {
+        "run_training.setup": {
+            "total": 0.05338089999999984,
+            "count": 1,
+            "self": 0.05338089999999984
+        },
+        "TrainerController.start_learning": {
+            "total": 133.8119286,
+            "count": 1,
+            "self": 0.011502299999989418,
+            "children": {
+                "TrainerController._reset_env": {
+                    "total": 11.5278951,
+                    "count": 1,
+                    "self": 11.5278951
+                },
+                "TrainerController.advance": {
+                    "total": 122.1850666,
+                    "count": 1,
+                    "self": 2.9500000010784788e-05,
+                    "children": {
+                        "env_step": {
+                            "total": 122.18503709999999,
+                            "count": 1,
+                            "self": 122.18501279999998,
+                            "children": {
+                                "SubprocessEnvManager._take_step": {
+                                    "total": 2.4299999999755073e-05,
+                                    "count": 1,
+                                    "self": 2.4299999999755073e-05
+                                }
+                            }
+                        }
+                    }
+                },
+                "TrainerController._save_models": {
+                    "total": 0.08746460000000411,
+                    "count": 1,
+                    "self": 0.0024905000000217115,
+                    "children": {
+                        "RLTrainer._checkpoint": {
+                            "total": 0.0849740999999824,
+                            "count": 1,
+                            "self": 0.0849740999999824
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
