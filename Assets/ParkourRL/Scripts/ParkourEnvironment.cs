@@ -46,6 +46,11 @@ namespace ParkourRL
 
         void Awake()
         {
+            InitializeOriginalPositions();
+        }
+
+        public void InitializeOriginalPositions()
+        {
             currentSpawnPoint = marioSpawnPoint != null ? marioSpawnPoint.position : Vector3.zero;
             originalSpawnPosition = currentSpawnPoint;
             if (goal != null)
@@ -220,6 +225,9 @@ namespace ParkourRL
                 envScript.randomizePlatforms = this.randomizePlatforms;
                 envScript.platformRandomizationRange = this.platformRandomizationRange;
                 
+                // Forca re-inicializacao das posicoes originais APOS os valores (goal, spawn) terem sido copiados!
+                envScript.InitializeOriginalPositions();
+                
                 parallelInstances.Add(new ParallelEnvInstance
                 {
                     root = envRoot,
@@ -242,12 +250,24 @@ namespace ParkourRL
             {
                 RandomizeSpawnAndGoal();
             }
+            else
+            {
+                // Se nao randomiza, reseta para as posicoes originais
+                currentSpawnPoint = originalSpawnPosition;
+                if (goal != null)
+                    goal.position = originalGoalPosition;
+            }
 
             if (!justSpawned)
             {
                 RespawnMario();
             }
             justSpawned = false;
+        }
+
+        public Vector3 GetCurrentSpawnPoint()
+        {
+            return currentSpawnPoint;
         }
 
         private void RandomizeSpawnAndGoal()
@@ -301,7 +321,7 @@ namespace ParkourRL
                 }
             }
 
-            Vector3 spawnPos = currentSpawnPoint + Vector3.up * 1f;
+            Vector3 spawnPos = currentSpawnPoint + Vector3.up * 2f;
             
             currentMario = new GameObject("MarioRL");
             currentMario.SetActive(false);
@@ -369,21 +389,18 @@ namespace ParkourRL
         {
             if (currentMario != null)
             {
-                currentSpawnPoint = marioSpawnPoint != null ? marioSpawnPoint.position : Vector3.zero;
-                
                 SM64Mario sm64Mario = currentMario.GetComponent<SM64Mario>();
                 if (sm64Mario != null)
                 {
-                    sm64Mario.Teleport(currentSpawnPoint + Vector3.up * 1f);
+                    sm64Mario.Teleport(currentSpawnPoint + Vector3.up * 2f);
                 }
                 else
                 {
-                    currentMario.transform.position = currentSpawnPoint + Vector3.up * 1f;
+                    currentMario.transform.position = currentSpawnPoint + Vector3.up * 2f;
                 }
             }
             else
             {
-                currentSpawnPoint = marioSpawnPoint != null ? marioSpawnPoint.position : Vector3.zero;
                 SpawnMario();
             }
         }

@@ -235,12 +235,26 @@ namespace ParkourRL
             SM64Mario sm64Mario = agent.GetComponent<SM64Mario>();
             if (sm64Mario != null)
             {
-                sm64Mario.Teleport(spawnPos);
+                sm64Mario.Teleport(spawnPos + Vector3.up * 1f); // Added extra height
             }
             else
             {
-                agent.transform.position = spawnPos;
+                agent.transform.position = spawnPos + Vector3.up * 1f;
             }
+        }
+
+        public Vector3 GetCurrentSpawnPoint(MarioCompetitiveAgent agent)
+        {
+            int idx = agents.IndexOf(agent);
+            if (spawnPoints != null && idx < spawnPoints.Length && idx >= 0 && spawnPoints[idx] != null)
+            {
+                return spawnPoints[idx].position;
+            }
+            else if (spawnPoints != null && spawnPoints.Length > 0 && spawnPoints[0] != null)
+            {
+                return spawnPoints[0].position + Vector3.right * (idx * 2f);
+            }
+            return Vector3.right * (idx * 2f);
         }
 
         void OnDrawGizmos()

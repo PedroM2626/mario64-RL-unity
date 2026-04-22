@@ -1094,8 +1094,8 @@ MonoBehaviour:
   goal: {fileID: 100000081}
   checkpoints: []
   platformSpawnPoints: []
-  randomizePlatforms: 0
-  platformRandomizationRange: 0
+  randomizePlatforms: 1
+  platformRandomizationRange: 1.5
   platformPrefabs: []
   parallelEnvironments: 4
   environmentSpacing: 30

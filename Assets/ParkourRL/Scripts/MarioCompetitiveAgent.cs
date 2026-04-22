@@ -55,7 +55,6 @@ namespace ParkourRL
         {
             if (marioComponent == null)
                 marioComponent = GetComponent<SM64Mario>();
-            startPosition = transform.position;
             bestCompletionTime = MAX_EPISODE_TIME;
         }
 
@@ -74,6 +73,7 @@ namespace ParkourRL
             if (competitiveEnv != null)
             {
                 competitiveEnv.RespawnAgent(this);
+                startPosition = competitiveEnv.GetCurrentSpawnPoint(this);
             }
             else
             {
@@ -110,11 +110,13 @@ namespace ParkourRL
         public override void CollectObservations(VectorSensor sensor)
         {
             Vector3 position = transform.position;
+            Vector3 envOffset = competitiveEnv != null ? competitiveEnv.transform.position : Vector3.zero;
+            Vector3 localPosition = position - envOffset;
 
-            // [3 obs] Posicao do Mario (normalizada)
-            sensor.AddObservation(position.x / 25f);
-            sensor.AddObservation(position.y / 10f);
-            sensor.AddObservation(position.z / 25f);
+            // [3 obs] Posicao do Mario (normalizada e relativa)
+            sensor.AddObservation(localPosition.x / 25f);
+            sensor.AddObservation(localPosition.y / 10f);
+            sensor.AddObservation(localPosition.z / 25f);
 
             // [4 obs] Direcao e distancia ao objetivo
             if (targetGoal != null)

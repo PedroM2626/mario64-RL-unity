@@ -44,7 +44,6 @@ namespace ParkourRL
             if (marioComponent == null)
                 marioComponent = GetComponent<SM64Mario>();
 
-            startPosition = transform.position;
             bestCompletionTime = MAX_EPISODE_TIME; // Inicializa com o pior tempo possivel
         }
 
@@ -63,6 +62,8 @@ namespace ParkourRL
             if (environment != null)
             {
                 environment.ResetEnvironment();
+                // Apos o reset (que teleporta o Mario), atualizamos a startPosition para refletir o spawn real
+                startPosition = environment.GetCurrentSpawnPoint();
             }
             else
             {
@@ -92,11 +93,13 @@ namespace ParkourRL
             }
 
             Vector3 position = transform.position;
+            Vector3 envOffset = environment != null ? environment.transform.position : Vector3.zero;
+            Vector3 localPosition = position - envOffset;
 
-            // [3 obs] Posicao do Mario (normalizada)
-            sensor.AddObservation(position.x / 25f);
-            sensor.AddObservation(position.y / 10f);
-            sensor.AddObservation(position.z / 25f);
+            // [3 obs] Posicao do Mario (normalizada e RELATIVA ao ambiente)
+            sensor.AddObservation(localPosition.x / 25f);
+            sensor.AddObservation(localPosition.y / 10f);
+            sensor.AddObservation(localPosition.z / 25f);
 
             // [4 obs] Direcao e distancia ao objetivo
             if (targetGoal != null)
