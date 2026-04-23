@@ -8,18 +8,26 @@ namespace ParkourRL
     {
         [Header("Mario Setup")]
         [SerializeField] private GameObject marioPrefab;
-        [SerializeField] private Transform marioSpawnPoint;
         [SerializeField] private Material marioMaterial;
 
         [Header("Level Elements")]
         [SerializeField] private Transform goal;
-        [SerializeField] private List<Checkpoint> checkpoints = new List<Checkpoint>();
-        [SerializeField] private List<Transform> platformSpawnPoints = new List<Transform>();
+        [Tooltip("Defina manualmente os locais de spawn no Inspector.")]
+        [SerializeField] private List<Transform> spawnPoints = new List<Transform>();
+        [Tooltip("Indice do spawnpoint utilizado para treino e respawn.")]
+        [SerializeField] private int selectedSpawnPointIndex = 0;
+
+        [Header("Curriculum")]
+        [Tooltip("Seleciona automaticamente o spawnpoint com base na licao atual do curriculum.")]
+        [SerializeField] private bool useCurriculumLessonForSpawn = true;
+        [Tooltip("Nome do Environment Parameter que guarda a licao atual.")]
+        [SerializeField] private string curriculumLessonParameter = "spawn_lesson";
+        [Tooltip("Se ligado, licao 0 usa o primeiro item da lista; se desligado, usa o ultimo.")]
+        [SerializeField] private bool lessonZeroUsesFirstSpawnPoint = true;
 
         [Header("Randomization")]
         [SerializeField] private bool randomizePlatforms = false;
         [SerializeField] private float platformRandomizationRange = 0.5f;
-        [SerializeField] private List<GameObject> platformPrefabs;
 
         [Header("Multi-Agent Parallel Training")]
         [SerializeField] private int parallelEnvironments = 4;
@@ -27,17 +35,16 @@ namespace ParkourRL
 
         private Vector3 currentSpawnPoint;
         private GameObject currentMario;
-        private Vector3 originalSpawnPosition;
         private Vector3 originalGoalPosition;
-        private Vector3[] originalPlatformPositions;
+        private bool warnedMissingSpawnPoints = false;
+        private int lastLoggedCurriculumLesson = int.MinValue;
+        private int lastLoggedSpawnIndex = int.MinValue;
         
         private List<ParallelEnvInstance> parallelInstances = new List<ParallelEnvInstance>();
 
         private class ParallelEnvInstance
         {
             public GameObject root;
-            public GameObject mario;
-            public Transform spawnPoint;
             public Transform goalTransform;
             public ParkourEnvironment envScript;
         }
@@ -51,28 +58,28 @@ namespace ParkourRL
 
         public void InitializeOriginalPositions()
         {
-            currentSpawnPoint = marioSpawnPoint != null ? marioSpawnPoint.position : Vector3.zero;
-            originalSpawnPosition = currentSpawnPoint;
+            currentSpawnPoint = GetSelectedSpawnPosition();
             if (goal != null)
                 originalGoalPosition = goal.position;
+        }
 
-            // Salvar posicoes originais
-            if (platformSpawnPoints != null && platformSpawnPoints.Count > 0)
+        private Vector3 GetSelectedSpawnPosition()
+        {
+            if (spawnPoints != null && spawnPoints.Count > 0)
             {
-                originalPlatformPositions = new Vector3[platformSpawnPoints.Count];
-                for (int i = 0; i < platformSpawnPoints.Count; i++)
-                {
-                    if (platformSpawnPoints[i] != null)
-                        originalPlatformPositions[i] = platformSpawnPoints[i].position;
-                }
+                selectedSpawnPointIndex = Mathf.Clamp(selectedSpawnPointIndex, 0, spawnPoints.Count - 1);
+                Transform selectedSpawn = spawnPoints[selectedSpawnPointIndex];
+                if (selectedSpawn != null)
+                    return selectedSpawn.position;
             }
 
-            // Coletar checkpoints
-            if (checkpoints.Count == 0)
+            if (!warnedMissingSpawnPoints)
             {
-                Checkpoint[] foundCheckpoints = FindObjectsOfType<Checkpoint>();
-                checkpoints.AddRange(foundCheckpoints);
+                Debug.LogWarning("[ParkourEnv] Nenhum spawnpoint manual configurado. Usando posicao do ParkourEnvironment.");
+                warnedMissingSpawnPoints = true;
             }
+
+            return transform.position;
         }
 
         void Start()
@@ -90,8 +97,12 @@ namespace ParkourRL
             // PASSO 3: Agora sim, recarregar terreno no SM64 com TODAS as plataformas
             SM64Context.RefreshStaticTerrain();
             LogTerrainInfo();
+
+            // PASSO 4: Aplicar selecao por curriculum antes do primeiro spawn
+            UpdateSpawnSelectionFromCurriculum();
+            currentSpawnPoint = GetSelectedSpawnPosition();
             
-            // PASSO 4: Spawnar Mario
+            // PASSO 5: Spawnar Mario
             Invoke(nameof(SpawnMario), 0.5f);
         }
 
@@ -206,10 +217,30 @@ namespace ParkourRL
                     goalClone.tag = "Goal";
                 }
                 
-                // Criar SpawnPoint
-                GameObject spawnClone = new GameObject($"SpawnPoint_Env{i}");
-                spawnClone.transform.position = (marioSpawnPoint != null ? marioSpawnPoint.position : Vector3.zero) + offset;
-                spawnClone.transform.parent = envRoot.transform;
+                // Clonar os spawnpoints manuais
+                List<Transform> clonedSpawnPoints = new List<Transform>();
+                if (spawnPoints != null)
+                {
+                    foreach (Transform sourceSpawn in spawnPoints)
+                    {
+                        if (sourceSpawn == null)
+                            continue;
+
+                        GameObject spawnClone = new GameObject($"{sourceSpawn.name}_Env{i}");
+                        spawnClone.transform.position = sourceSpawn.position + offset;
+                        spawnClone.transform.rotation = sourceSpawn.rotation;
+                        spawnClone.transform.parent = envRoot.transform;
+                        clonedSpawnPoints.Add(spawnClone.transform);
+                    }
+                }
+
+                if (clonedSpawnPoints.Count == 0)
+                {
+                    GameObject fallbackSpawn = new GameObject($"SpawnPoint_Env{i}");
+                    fallbackSpawn.transform.position = transform.position + offset;
+                    fallbackSpawn.transform.parent = envRoot.transform;
+                    clonedSpawnPoints.Add(fallbackSpawn.transform);
+                }
                 
                 // Criar ParkourEnvironment para esta copia
                 GameObject envControllerObj = new GameObject($"ParkourController_Env{i}");
@@ -218,12 +249,16 @@ namespace ParkourRL
                 
                 ParkourEnvironment envScript = envControllerObj.AddComponent<ParkourEnvironment>();
                 envScript.parallelEnvironments = 0; // Impede recursao
-                envScript.marioSpawnPoint = spawnClone.transform;
                 envScript.goal = goalClone != null ? goalClone.transform : null;
                 envScript.marioPrefab = this.marioPrefab;
                 envScript.marioMaterial = this.marioMaterial;
                 envScript.randomizePlatforms = this.randomizePlatforms;
                 envScript.platformRandomizationRange = this.platformRandomizationRange;
+                envScript.spawnPoints = clonedSpawnPoints;
+                envScript.selectedSpawnPointIndex = Mathf.Clamp(this.selectedSpawnPointIndex, 0, clonedSpawnPoints.Count - 1);
+                envScript.useCurriculumLessonForSpawn = this.useCurriculumLessonForSpawn;
+                envScript.curriculumLessonParameter = this.curriculumLessonParameter;
+                envScript.lessonZeroUsesFirstSpawnPoint = this.lessonZeroUsesFirstSpawnPoint;
                 
                 // Forca re-inicializacao das posicoes originais APOS os valores (goal, spawn) terem sido copiados!
                 envScript.InitializeOriginalPositions();
@@ -231,7 +266,6 @@ namespace ParkourRL
                 parallelInstances.Add(new ParallelEnvInstance
                 {
                     root = envRoot,
-                    spawnPoint = spawnClone.transform,
                     goalTransform = goalClone != null ? goalClone.transform : null,
                     envScript = envScript
                 });
@@ -242,20 +276,14 @@ namespace ParkourRL
 
         public void ResetEnvironment()
         {
-            ResetCheckpoints();
+            UpdateSpawnSelectionFromCurriculum();
+            currentSpawnPoint = GetSelectedSpawnPosition();
+            if (goal != null)
+                goal.position = originalGoalPosition;
             
-            // Randomiza levemente o Ponto de Spawn e o Goal para cada episodio!
-            // Isso evita "decorar" comandos de joystick.
             if (randomizePlatforms)
             {
                 RandomizeSpawnAndGoal();
-            }
-            else
-            {
-                // Se nao randomiza, reseta para as posicoes originais
-                currentSpawnPoint = originalSpawnPosition;
-                if (goal != null)
-                    goal.position = originalGoalPosition;
             }
 
             if (!justSpawned)
@@ -272,15 +300,13 @@ namespace ParkourRL
 
         private void RandomizeSpawnAndGoal()
         {
-            // Randomiza levemente as posicoes em X e Z dentro do platformRandomizationRange
             float range = platformRandomizationRange > 0 ? platformRandomizationRange : 1.5f;
 
-            if (marioSpawnPoint != null)
+            if (spawnPoints != null && spawnPoints.Count > 0)
             {
                 float offsetX = UnityEngine.Random.Range(-range, range);
                 float offsetZ = UnityEngine.Random.Range(-range, range);
-                // Atualizamos apenas o currentSpawnPoint (para nao mover fisicamente o cubo, apenas onde o mario cai)
-                currentSpawnPoint = originalSpawnPosition + new Vector3(offsetX, 0, offsetZ);
+                currentSpawnPoint += new Vector3(offsetX, 0, offsetZ);
             }
 
             if (goal != null)
@@ -291,17 +317,31 @@ namespace ParkourRL
             }
         }
 
-        public void SetCheckpoint(Vector3 position)
+        private void UpdateSpawnSelectionFromCurriculum()
         {
-            currentSpawnPoint = position;
-        }
+            if (!useCurriculumLessonForSpawn || spawnPoints == null || spawnPoints.Count == 0)
+                return;
 
-        private void ResetCheckpoints()
-        {
-            foreach (var checkpoint in checkpoints)
+            var academy = Unity.MLAgents.Academy.Instance;
+            if (academy == null)
+                return;
+
+            float lessonValue = academy.EnvironmentParameters.GetWithDefault(curriculumLessonParameter, -1f);
+            if (lessonValue < 0f)
+                return;
+
+            int lesson = Mathf.Max(0, Mathf.RoundToInt(lessonValue));
+            int mappedIndex = lessonZeroUsesFirstSpawnPoint
+                ? lesson
+                : (spawnPoints.Count - 1 - lesson);
+
+            selectedSpawnPointIndex = Mathf.Clamp(mappedIndex, 0, spawnPoints.Count - 1);
+
+            if (lesson != lastLoggedCurriculumLesson || selectedSpawnPointIndex != lastLoggedSpawnIndex)
             {
-                if (checkpoint != null)
-                    checkpoint.Reset();
+                Debug.Log($"[ParkourEnv] Curriculum '{curriculumLessonParameter}'={lesson} => spawnPoints[{selectedSpawnPointIndex}]");
+                lastLoggedCurriculumLesson = lesson;
+                lastLoggedSpawnIndex = selectedSpawnPointIndex;
             }
         }
 
@@ -369,11 +409,11 @@ namespace ParkourRL
             // 2 acoes continuas (joystick X/Y) + 1 discreta (Jump com 2 opcoes: 0=nao, 1=sim)
             behaviorParams.BrainParameters.ActionSpec = new Unity.MLAgents.Actuators.ActionSpec(2, new int[] { 2 });
 
-            // Decision Requester
+            // Decision Requester (DecisionPeriod=5 para evitar movimentos espasmodicos)
             var decisionRequester = currentMario.GetComponent<Unity.MLAgents.DecisionRequester>();
             if (decisionRequester == null)
                 decisionRequester = currentMario.AddComponent<Unity.MLAgents.DecisionRequester>();
-            decisionRequester.DecisionPeriod = 2;
+            decisionRequester.DecisionPeriod = 5;
             decisionRequester.TakeActionsBetweenDecisions = true;
 
             agent.SetEnvironment(this);
@@ -407,10 +447,16 @@ namespace ParkourRL
 
         void OnDrawGizmos()
         {
-            if (marioSpawnPoint != null)
+            if (spawnPoints != null)
             {
-                Gizmos.color = Color.green;
-                Gizmos.DrawWireSphere(marioSpawnPoint.position, 1f);
+                for (int i = 0; i < spawnPoints.Count; i++)
+                {
+                    if (spawnPoints[i] == null)
+                        continue;
+
+                    Gizmos.color = i == selectedSpawnPointIndex ? Color.green : Color.cyan;
+                    Gizmos.DrawWireSphere(spawnPoints[i].position, 1f);
+                }
             }
 
             if (goal != null)

@@ -32,9 +32,10 @@ namespace ParkourRL
         private float previousDistanceToGoal;
         private float episodeTime;
         private float bestDistanceToGoal;
+        private float bestDistanceWhileGrounded; // Rastreia o progresso SEGURO (quando ele pousa em uma plataforma)
         private float bestCompletionTime; // Melhor tempo de conclusao entre episodios
 
-        private const float MAX_EPISODE_TIME = 30f;
+        private const float MAX_EPISODE_TIME = 60f; // Mais tempo (mapa maior)
         
         // Cache array for Raycasts to prevent ALLOC_TEMP_MAIN leakage
         private RaycastHit[] raycastHitsCache = new RaycastHit[1];
@@ -78,6 +79,7 @@ namespace ParkourRL
             initialDistanceToGoal = GetDistanceToGoal();
             previousDistanceToGoal = initialDistanceToGoal;
             bestDistanceToGoal = initialDistanceToGoal;
+            bestDistanceWhileGrounded = initialDistanceToGoal; // Inicia a distancia segura
             previousPosition = transform.position;
             episodeTime = 0f;
 
@@ -192,60 +194,65 @@ namespace ParkourRL
             Vector3 currentPos = transform.position;
             float currentDistance = GetDistanceToGoal();
 
-            // -- PENALIDADE POR INATIVIDADE (escalonada) --
-            // Se o Mario nao se moveu quase nada, penalidade DOBRADA.
-            // Isso pune "pular no lugar" mais do que "correr e cair".
-            float moveDelta = Vector3.Distance(currentPos, previousPosition);
-            float stepPenalty = (moveDelta < 0.05f) ? -0.015f : -0.005f;
-            AddReward(stepPenalty);
-
-            // -- RECOMPENSA POR PROGRESSO --
-            // Cada unidade de distancia que ele se aproxima do goal vale MUITO.
-            float distanceDelta = previousDistanceToGoal - currentDistance;
-            if (distanceDelta > 0.01f)
+            // -- MODO CRUEL (VELOCIDADE MINIMA E DIRECAO OBRIGATORIA) --
+            // Calculamos a velocidade vetorial exata NA DIRECAO do objetivo
+            Vector3 velocity = (currentPos - previousPosition) / Time.fixedDeltaTime;
+            Vector3 dirToGoal = Vector3.zero;
+            if (targetGoal != null)
             {
-                // Progresso escalado agressivamente
-                AddReward(distanceDelta * 3.0f);
+                dirToGoal = (targetGoal.position - currentPos).normalized;
             }
-            else if (distanceDelta < -0.01f)
+            float speedTowardsGoal = Vector3.Dot(velocity, dirToGoal);
+
+            // A punição por permanecer vivo (existencial)
+            float existentialPenalty = -0.1f;
+            
+            // Periodo de graca de 1.5s para ele nascer, cair na plataforma e comecar a correr sem ser punido injustamente
+            if (episodeTime > 1.5f)
             {
-                // Penalidade LEVE por se afastar (menos que cair/timeout)
-                AddReward(distanceDelta * 0.5f);
+                AddReward(existentialPenalty);
+
+                // Se ele estiver parado, indo para trás, ou muito devagar (menos de 2.0 m/s na direção do objetivo)
+                if (speedTowardsGoal < 2.0f)
+                {
+                    // Punição cruel por frame. Em 10 frames (1 segundo), é pior que morrer.
+                    AddReward(-2.0f);
+                }
             }
 
-            // -- BONUS POR MARCO DE DISTANCIA (a cada 1 unidade mais perto) --
-            if (currentDistance < bestDistanceToGoal - 1.0f)
+            // Removida a recompensa de distanceDelta contínua. Ele não é mais pago por "se jogar" no ar.
+            // Ele só tem duas opções: Correr para frente na plataforma, ou pular para a próxima.
+
+            // -- RECOMPENSA POR ALCANCAR NOVA PLATAFORMA (NOVO MARCO SEGURO) --
+            // Checamos se ele esta pisando em algo firme (chao)
+            bool isGrounded = Physics.RaycastNonAlloc(currentPos + Vector3.up * 0.1f, Vector3.down, raycastHitsCache, 0.5f) > 0;
+            
+            // Se ele estiver no chao e avancou pelo menos 4 unidades em relacao a ultima vez que esteve no chao
+            if (isGrounded && currentDistance < bestDistanceWhileGrounded - 4.0f)
             {
-                float improvement = bestDistanceToGoal - currentDistance;
-                AddReward(5.0f); // Bonus grande por progresso significativo
-                bestDistanceToGoal = currentDistance;
-                Debug.Log($"[Mario] MARCO! Nova melhor distancia: {bestDistanceToGoal:F1} (delta: {improvement:F1})");
+                float improvement = bestDistanceWhileGrounded - currentDistance;
+                AddReward(50.0f); // Recompensa GIGANTE por alcancar um lugar seguro novo
+                bestDistanceWhileGrounded = currentDistance;
+                Debug.Log($"[Mario] PLATAFORMA ALCANCADA! Nova distancia segura: {bestDistanceWhileGrounded:F1} | Reward: +50");
             }
 
             previousDistanceToGoal = currentDistance;
             previousPosition = currentPos;
 
             // -- MORTE POR QUEDA --
-            // Cair da plataforma e ruim, mas e MELHOR do que ficar parado.
-            // Quem cai tentando ganha reset rapido para tentar de novo.
+            // A morte não é tão assustadora agora (equiparável a ficar 5 frames parado).
+            // Isso tira o medo de pular.
             if (currentPos.y < startPosition.y - 3.0f)
             {
-                // Penalidade proporcional: se caiu com progresso, penalidade menor
-                float progressRatio = 1.0f - (currentDistance / Mathf.Max(initialDistanceToGoal, 0.1f));
-                float deathPenalty = -2.0f + progressRatio * 1.0f; // -2.0 se zero progresso, -1.0 se quase la
-                AddReward(deathPenalty);
+                AddReward(-10.0f); 
                 EndEpisode();
                 return;
             }
 
-            // -- TIMEOUT (PIOR RESULTADO POSSIVEL) --
-            // Ficar parado ate o fim e PIOR do que morrer tentando.
-            // Isso forca o agente a arriscar pular em vez de ficar seguro.
+            // -- TIMEOUT --
             if (episodeTime >= MAX_EPISODE_TIME)
             {
-                float progressRatio = 1.0f - (currentDistance / Mathf.Max(initialDistanceToGoal, 0.1f));
-                float timeoutPenalty = -8.0f + progressRatio * 3.0f; // -8 se zero progresso, -5 se quase la
-                AddReward(timeoutPenalty);
+                AddReward(-10.0f); 
                 EndEpisode();
                 return;
             }
@@ -302,33 +309,13 @@ namespace ParkourRL
         {
             if (other.CompareTag("Goal"))
             {
-                // Bonus de tempo: quanto mais rapido, maior a recompensa.
+                // Goal atingido merece recompensa absoluta absurda agora
                 float timeRemaining = Mathf.Max(0, MAX_EPISODE_TIME - episodeTime);
-                float timeBonus = timeRemaining * 2.0f; // ate +60 extras
+                float timeBonus = (timeRemaining / MAX_EPISODE_TIME) * 50.0f;
 
-                // Bonus por recorde pessoal (bateu seu melhor tempo?)
-                float recordBonus = 0f;
-                if (episodeTime < bestCompletionTime)
-                {
-                    recordBonus = (bestCompletionTime - episodeTime) * 3.0f;
-                    bestCompletionTime = episodeTime;
-                    Debug.Log($"[Mario] NOVO RECORDE! Tempo: {episodeTime:F1}s (anterior: {bestCompletionTime:F1}s, bonus: +{recordBonus:F1})");
-                }
-
-                Debug.Log($"[Mario] ====== GOAL! ====== Tempo: {episodeTime:F1}s | TimeBonus: +{timeBonus:F1} | RecordBonus: +{recordBonus:F1} | Step: {StepCount}");
-                AddReward(50f + timeBonus + recordBonus);
+                Debug.Log($"[Mario] ====== GOAL! ====== Tempo: {episodeTime:F1}s | TimeBonus: +{timeBonus:F1} | Step: {StepCount}");
+                AddReward(200f + timeBonus); // Recompensa absurda para garantir a fixacao do final
                 EndEpisode();
-            }
-            else if (other.CompareTag("Checkpoint"))
-            {
-                Checkpoint checkpoint = other.GetComponent<Checkpoint>();
-                if (checkpoint != null && !checkpoint.IsActivated)
-                {
-                    checkpoint.Activate();
-                    AddReward(5f);
-                    environment?.SetCheckpoint(checkpoint.transform.position);
-                    Debug.Log($"[Mario] Checkpoint atingido!");
-                }
             }
         }
 

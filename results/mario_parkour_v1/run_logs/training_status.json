@@ -2,22 +2,58 @@
     "MarioParkour": {
         "checkpoints": [
             {
-                "steps": 2428,
-                "file_path": "results\\mario_parkour_v1\\MarioParkour\\MarioParkour-2428.onnx",
-                "reward": -12.13310710216032,
-                "creation_time": 1776881506.1039946,
+                "steps": 2399988,
+                "file_path": "results\\mario_parkour_v1\\MarioParkour\\MarioParkour-2399988.onnx",
+                "reward": 202.7895891391314,
+                "creation_time": 1776894372.1602056,
                 "auxillary_file_paths": [
-                    "results\\mario_parkour_v1\\MarioParkour\\MarioParkour-2428.pt"
+                    "results\\mario_parkour_v1\\MarioParkour\\MarioParkour-2399988.pt"
+                ]
+            },
+            {
+                "steps": 2599961,
+                "file_path": "results\\mario_parkour_v1\\MarioParkour\\MarioParkour-2599961.onnx",
+                "reward": 215.17282104492188,
+                "creation_time": 1776895591.868351,
+                "auxillary_file_paths": [
+                    "results\\mario_parkour_v1\\MarioParkour\\MarioParkour-2599961.pt"
+                ]
+            },
+            {
+                "steps": 2799997,
+                "file_path": "results\\mario_parkour_v1\\MarioParkour\\MarioParkour-2799997.onnx",
+                "reward": 191.70041072114984,
+                "creation_time": 1776896804.4961421,
+                "auxillary_file_paths": [
+                    "results\\mario_parkour_v1\\MarioParkour\\MarioParkour-2799997.pt"
+                ]
+            },
+            {
+                "steps": 2999973,
+                "file_path": "results\\mario_parkour_v1\\MarioParkour\\MarioParkour-2999973.onnx",
+                "reward": 81.39307320636252,
+                "creation_time": 1776898101.412872,
+                "auxillary_file_paths": [
+                    "results\\mario_parkour_v1\\MarioParkour\\MarioParkour-2999973.pt"
+                ]
+            },
+            {
+                "steps": 3114997,
+                "file_path": "results\\mario_parkour_v1\\MarioParkour\\MarioParkour-3114997.onnx",
+                "reward": 49.11492830164292,
+                "creation_time": 1776898825.1736612,
+                "auxillary_file_paths": [
+                    "results\\mario_parkour_v1\\MarioParkour\\MarioParkour-3114997.pt"
                 ]
             }
         ],
         "final_checkpoint": {
-            "steps": 2428,
+            "steps": 3114997,
             "file_path": "results\\mario_parkour_v1\\MarioParkour.onnx",
-            "reward": -12.13310710216032,
-            "creation_time": 1776881506.1039946,
+            "reward": 49.11492830164292,
+            "creation_time": 1776898825.1736612,
             "auxillary_file_paths": [
-                "results\\mario_parkour_v1\\MarioParkour\\MarioParkour-2428.pt"
+                "results\\mario_parkour_v1\\MarioParkour\\MarioParkour-3114997.pt"
             ]
         }
     },

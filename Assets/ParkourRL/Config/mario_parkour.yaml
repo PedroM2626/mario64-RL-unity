@@ -38,7 +38,45 @@ engine_settings:
   width: 1280
   height: 720
   quality_level: 2
-  time_scale: 2.0
+  time_scale: 1.0
   target_frame_rate: -1
   capture_frame_rate: 60
   no_graphics: false
+
+environment_parameters:
+  spawn_lesson:
+    curriculum:
+      - name: Lesson0_Easiest
+        completion_criteria:
+          measure: reward
+          behavior: MarioParkour
+          signal_smoothing: true
+          min_lesson_length: 50
+          threshold: 100.0
+        value: 0.0
+      - name: Lesson1_Medium
+        completion_criteria:
+          measure: reward
+          behavior: MarioParkour
+          signal_smoothing: true
+          min_lesson_length: 50
+          threshold: 100.0
+        value: 1.0
+      - name: Lesson2_Harder
+        completion_criteria:
+          measure: reward
+          behavior: MarioParkour
+          signal_smoothing: true
+          min_lesson_length: 50
+          threshold: 100.0
+        value: 2.0
+      - name: Lesson3_HarderPlus
+        completion_criteria:
+          measure: reward
+          behavior: MarioParkour
+          signal_smoothing: true
+          min_lesson_length: 50
+          threshold: 100.0
+        value: 3.0
+      - name: Lesson4_Hardest
+        value: 4.0

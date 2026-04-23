@@ -161,7 +161,7 @@ namespace ParkourRL
 
             // Decision Requester
             var dr = marioObj.AddComponent<Unity.MLAgents.DecisionRequester>();
-            dr.DecisionPeriod = 2;
+            dr.DecisionPeriod = 5;
             dr.TakeActionsBetweenDecisions = true;
 
             // Configurar referencias
