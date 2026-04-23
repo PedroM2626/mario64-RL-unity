@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
 using LibSM64;
 
@@ -28,6 +29,10 @@ namespace ParkourRL
         [Header("Randomization")]
         [SerializeField] private bool randomizePlatforms = false;
         [SerializeField] private float platformRandomizationRange = 0.5f;
+        [Tooltip("A randomizacao so entra quando a licao do curriculum atingir este valor.")]
+        [SerializeField] private int randomizationStartsAtLesson = 1;
+        [Tooltip("Licao na qual a randomizacao atinge o valor maximo configurado.")]
+        [SerializeField] private int randomizationMaxesAtLesson = 4;
 
         [Header("Multi-Agent Parallel Training")]
         [SerializeField] private int parallelEnvironments = 4;
@@ -39,6 +44,8 @@ namespace ParkourRL
         private bool warnedMissingSpawnPoints = false;
         private int lastLoggedCurriculumLesson = int.MinValue;
         private int lastLoggedSpawnIndex = int.MinValue;
+        private const float SPAWN_RANDOMIZATION_BOUNDS_FACTOR = 0.45f;
+        private const float MIN_RANDOMIZATION_RANGE = 0.05f;
         
         private List<ParallelEnvInstance> parallelInstances = new List<ParallelEnvInstance>();
 
@@ -94,6 +101,14 @@ namespace ParkourRL
                 SpawnParallelEnvironments();
             }
 
+            StartCoroutine(RefreshTerrainAndSpawnMario());
+        }
+
+        private IEnumerator RefreshTerrainAndSpawnMario()
+        {
+            // Espera o ciclo de fisica para garantir que os colliders recem-criados estejam prontos.
+            yield return new WaitForFixedUpdate();
+
             // PASSO 3: Agora sim, recarregar terreno no SM64 com TODAS as plataformas
             SM64Context.RefreshStaticTerrain();
             LogTerrainInfo();
@@ -101,9 +116,9 @@ namespace ParkourRL
             // PASSO 4: Aplicar selecao por curriculum antes do primeiro spawn
             UpdateSpawnSelectionFromCurriculum();
             currentSpawnPoint = GetSelectedSpawnPosition();
-            
+
             // PASSO 5: Spawnar Mario
-            Invoke(nameof(SpawnMario), 0.5f);
+            SpawnMario();
         }
 
         /// <summary>
@@ -280,10 +295,11 @@ namespace ParkourRL
             currentSpawnPoint = GetSelectedSpawnPosition();
             if (goal != null)
                 goal.position = originalGoalPosition;
-            
-            if (randomizePlatforms)
+
+            float randomizationRange = GetCurriculumRandomizationRange();
+            if (randomizationRange > 0f)
             {
-                RandomizeSpawnAndGoal();
+                RandomizeSpawnAndGoal(randomizationRange);
             }
 
             if (!justSpawned)
@@ -298,14 +314,21 @@ namespace ParkourRL
             return currentSpawnPoint;
         }
 
-        private void RandomizeSpawnAndGoal()
+        private void RandomizeSpawnAndGoal(float range)
         {
-            float range = platformRandomizationRange > 0 ? platformRandomizationRange : 1.5f;
-
             if (spawnPoints != null && spawnPoints.Count > 0)
             {
-                float offsetX = UnityEngine.Random.Range(-range, range);
-                float offsetZ = UnityEngine.Random.Range(-range, range);
+                float rangeX = range;
+                float rangeZ = range;
+
+                if (TryGetGroundBounds(currentSpawnPoint, out Bounds groundBounds))
+                {
+                    rangeX = Mathf.Min(range, Mathf.Max(MIN_RANDOMIZATION_RANGE, groundBounds.extents.x * SPAWN_RANDOMIZATION_BOUNDS_FACTOR));
+                    rangeZ = Mathf.Min(range, Mathf.Max(MIN_RANDOMIZATION_RANGE, groundBounds.extents.z * SPAWN_RANDOMIZATION_BOUNDS_FACTOR));
+                }
+
+                float offsetX = UnityEngine.Random.Range(-rangeX, rangeX);
+                float offsetZ = UnityEngine.Random.Range(-rangeZ, rangeZ);
                 currentSpawnPoint += new Vector3(offsetX, 0, offsetZ);
             }
 
@@ -315,6 +338,53 @@ namespace ParkourRL
                 float offsetZ = UnityEngine.Random.Range(-range, range);
                 goal.position = originalGoalPosition + new Vector3(offsetX, 0, offsetZ);
             }
+        }
+
+        private float GetCurriculumLessonValue()
+        {
+            if (!useCurriculumLessonForSpawn)
+                return -1f;
+
+            var academy = Unity.MLAgents.Academy.Instance;
+            if (academy == null)
+                return -1f;
+
+            return academy.EnvironmentParameters.GetWithDefault(curriculumLessonParameter, -1f);
+        }
+
+        private float GetCurriculumRandomizationRange()
+        {
+            if (!randomizePlatforms)
+                return 0f;
+
+            float lessonValue = GetCurriculumLessonValue();
+            if (lessonValue < 0f)
+                return 0f;
+
+            int lesson = Mathf.Max(0, Mathf.RoundToInt(lessonValue));
+            if (lesson < randomizationStartsAtLesson)
+                return 0f;
+
+            float maxRange = platformRandomizationRange > 0f ? platformRandomizationRange : 1.5f;
+            if (lesson >= randomizationMaxesAtLesson)
+                return maxRange;
+
+            float t = Mathf.InverseLerp(randomizationStartsAtLesson, Mathf.Max(randomizationMaxesAtLesson, randomizationStartsAtLesson + 1), lesson);
+            return Mathf.Lerp(0f, maxRange, t);
+        }
+
+        private bool TryGetGroundBounds(Vector3 position, out Bounds bounds)
+        {
+            Vector3 rayOrigin = position + Vector3.up * 10f;
+
+            if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit hit, 50f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+            {
+                bounds = hit.collider.bounds;
+                return true;
+            }
+
+            bounds = new Bounds();
+            return false;
         }
 
         private void UpdateSpawnSelectionFromCurriculum()
@@ -432,7 +502,15 @@ namespace ParkourRL
                 SM64Mario sm64Mario = currentMario.GetComponent<SM64Mario>();
                 if (sm64Mario != null)
                 {
-                    sm64Mario.Teleport(currentSpawnPoint + Vector3.up * 2f);
+                    Vector3 respawnPosition = currentSpawnPoint + Vector3.up * 2f;
+                    if (sm64Mario.isActiveAndEnabled)
+                    {
+                        sm64Mario.Teleport(respawnPosition);
+                    }
+                    else
+                    {
+                        currentMario.transform.position = respawnPosition;
+                    }
                 }
                 else
                 {

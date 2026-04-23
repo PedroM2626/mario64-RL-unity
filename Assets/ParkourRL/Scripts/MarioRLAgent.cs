@@ -40,6 +40,15 @@ namespace ParkourRL
         // Cache array for Raycasts to prevent ALLOC_TEMP_MAIN leakage
         private RaycastHit[] raycastHitsCache = new RaycastHit[1];
 
+        private float GetCurriculumLessonValue()
+        {
+            var academy = Unity.MLAgents.Academy.Instance;
+            if (academy == null)
+                return -1f;
+
+            return academy.EnvironmentParameters.GetWithDefault("spawn_lesson", -1f);
+        }
+
         void Awake()
         {
             if (marioComponent == null)
@@ -193,6 +202,7 @@ namespace ParkourRL
             episodeTime += Time.fixedDeltaTime;
             Vector3 currentPos = transform.position;
             float currentDistance = GetDistanceToGoal();
+            float curriculumLesson = GetCurriculumLessonValue();
 
             // -- MODO CRUEL (VELOCIDADE MINIMA E DIRECAO OBRIGATORIA) --
             // Calculamos a velocidade vetorial exata NA DIRECAO do objetivo
@@ -205,18 +215,25 @@ namespace ParkourRL
             float speedTowardsGoal = Vector3.Dot(velocity, dirToGoal);
 
             // A punição por permanecer vivo (existencial)
-            float existentialPenalty = -0.1f;
+            float existentialPenalty = curriculumLesson >= 2f ? -0.05f : -0.01f;
             
             // Periodo de graca de 1.5s para ele nascer, cair na plataforma e comecar a correr sem ser punido injustamente
             if (episodeTime > 1.5f)
             {
                 AddReward(existentialPenalty);
 
-                // Se ele estiver parado, indo para trás, ou muito devagar (menos de 2.0 m/s na direção do objetivo)
-                if (speedTowardsGoal < 2.0f)
+                // Nas primeiras lições, evitamos empurrar o Mario para a morte com uma penalidade muito agressiva.
+                // Depois o curriculum pode apertar a meta de velocidade.
+                if (curriculumLesson >= 2f)
                 {
-                    // Punição cruel por frame. Em 10 frames (1 segundo), é pior que morrer.
-                    AddReward(-2.0f);
+                    if (speedTowardsGoal < 2.0f)
+                    {
+                        AddReward(-0.25f);
+                    }
+                }
+                else if (speedTowardsGoal < 0f)
+                {
+                    AddReward(speedTowardsGoal * 0.02f);
                 }
             }
 

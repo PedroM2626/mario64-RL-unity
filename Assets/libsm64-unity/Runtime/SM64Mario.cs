@@ -30,11 +30,17 @@ namespace LibSM64
             var initPos = transform.position;
             marioId = Interop.MarioCreate( new Vector3( -initPos.x, initPos.y, initPos.z ) * Interop.SCALE_FACTOR );
 
+            states = new Interop.SM64MarioState[2] {
+                new Interop.SM64MarioState(),
+                new Interop.SM64MarioState()
+            };
+
             inputProvider = GetComponent<SM64InputProvider>();
             if( inputProvider == null )
             {
                 Debug.LogError("[SM64Mario] InputProvider não encontrado!");
-                throw new System.Exception("Need to add an input provider component to Mario");
+                enabled = false;
+                return;
             }
             if (inputProvider.GetType().Name != "MarioInputProvider")
             {
@@ -46,11 +52,6 @@ namespace LibSM64
             
             var renderer = marioRendererObject.AddComponent<MeshRenderer>();
             var meshFilter = marioRendererObject.AddComponent<MeshFilter>();
-
-            states = new Interop.SM64MarioState[2] {
-                new Interop.SM64MarioState(),
-                new Interop.SM64MarioState()
-            };
 
             if (material != null)
             {
@@ -100,11 +101,27 @@ namespace LibSM64
 
         public void Teleport(Vector3 newPos)
         {
-            // Apaga a instância nativa velha
-            if( Interop.isGlobalInit ) {
+            // Atualiza a posição inicial instantaneamente visualmente
+            transform.position = newPos;
+
+            // Durante criação/desativação, ainda não há estado nativo válido para teleporte completo.
+            if (!isActiveAndEnabled || !Interop.isGlobalInit)
+                return;
+
+            if (states == null || states.Length < 2)
+            {
+                states = new Interop.SM64MarioState[2] {
+                    new Interop.SM64MarioState(),
+                    new Interop.SM64MarioState()
+                };
+            }
+
+            // Apaga a instância nativa velha (se existir)
+            if (marioId != 0)
+            {
                 Interop.MarioDelete(marioId);
             }
-            
+
             // Recria a instância nativa na nova posição
             marioId = Interop.MarioCreate( new Vector3( -newPos.x, newPos.y, newPos.z ) * Interop.SCALE_FACTOR );
 
@@ -112,9 +129,6 @@ namespace LibSM64
             states[0] = new Interop.SM64MarioState();
             states[1] = new Interop.SM64MarioState();
             buffIndex = 0;
-            
-            // Atualiza a posição inicial instantaneamente visualmente
-            transform.position = newPos;
         }
 
         public void contextFixedUpdate()
