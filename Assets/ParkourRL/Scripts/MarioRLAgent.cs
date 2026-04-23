@@ -20,6 +20,22 @@ namespace ParkourRL
         [SerializeField] private int raycastCount = 8;
         [SerializeField] private float raycastDistance = 10f;
 
+        [Header("Curriculum / Reward Shaping")]
+        [Tooltip("Licao a partir da qual a penalidade por velocidade fica mais agressiva.")]
+        [SerializeField] private int aggressiveShapingStartsAtLesson = 2;
+        [Tooltip("Penalidade base por passo nas primeiras licoes.")]
+        [SerializeField] private float earlyLessonExistentialPenalty = -0.01f;
+        [Tooltip("Penalidade base por passo nas licoes mais avancadas.")]
+        [SerializeField] private float lateLessonExistentialPenalty = -0.05f;
+        [Tooltip("Bonus por progresso em direcao ao goal nas primeiras licoes.")]
+        [SerializeField] private float earlyLessonProgressReward = 0.20f;
+        [Tooltip("Bonus por progresso em direcao ao goal nas licoes avancadas.")]
+        [SerializeField] private float lateLessonProgressReward = 0.10f;
+        [Tooltip("Punição por andar para tras nas primeiras licoes.")]
+        [SerializeField] private float earlyLessonBackwardPenalty = 0.02f;
+        [Tooltip("Punição por andar para tras nas licoes avancadas.")]
+        [SerializeField] private float lateLessonBackwardPenalty = 0.04f;
+
         [HideInInspector] public Vector2 joystickInput;
         [HideInInspector] public bool jumpPressed;
         [HideInInspector] public bool kickPressed;
@@ -213,27 +229,30 @@ namespace ParkourRL
                 dirToGoal = (targetGoal.position - currentPos).normalized;
             }
             float speedTowardsGoal = Vector3.Dot(velocity, dirToGoal);
+            float distanceDelta = previousDistanceToGoal - currentDistance;
+            bool advancedShaping = curriculumLesson >= aggressiveShapingStartsAtLesson;
 
             // A punição por permanecer vivo (existencial)
-            float existentialPenalty = curriculumLesson >= 2f ? -0.05f : -0.01f;
+            float existentialPenalty = advancedShaping ? lateLessonExistentialPenalty : earlyLessonExistentialPenalty;
             
             // Periodo de graca de 1.5s para ele nascer, cair na plataforma e comecar a correr sem ser punido injustamente
             if (episodeTime > 1.5f)
             {
                 AddReward(existentialPenalty);
 
-                // Nas primeiras lições, evitamos empurrar o Mario para a morte com uma penalidade muito agressiva.
-                // Depois o curriculum pode apertar a meta de velocidade.
-                if (curriculumLesson >= 2f)
+                if (distanceDelta > 0f)
                 {
-                    if (speedTowardsGoal < 2.0f)
-                    {
-                        AddReward(-0.25f);
-                    }
+                    AddReward(distanceDelta * (advancedShaping ? lateLessonProgressReward : earlyLessonProgressReward));
                 }
-                else if (speedTowardsGoal < 0f)
+                else if (distanceDelta < 0f)
                 {
-                    AddReward(speedTowardsGoal * 0.02f);
+                    AddReward(distanceDelta * (advancedShaping ? lateLessonBackwardPenalty : earlyLessonBackwardPenalty));
+                }
+
+                // Nas lições mais avançadas, exige velocidade minima para evitar rastejar sem evoluir.
+                if (advancedShaping && speedTowardsGoal < 2.0f)
+                {
+                    AddReward(-0.25f);
                 }
             }
 

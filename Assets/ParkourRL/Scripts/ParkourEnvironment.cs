@@ -25,10 +25,19 @@ namespace ParkourRL
         [SerializeField] private string curriculumLessonParameter = "spawn_lesson";
         [Tooltip("Se ligado, licao 0 usa o primeiro item da lista; se desligado, usa o ultimo.")]
         [SerializeField] private bool lessonZeroUsesFirstSpawnPoint = true;
+        [Tooltip("Forca manualmente um spawnpoint fixo, ignorando o curriculum.")]
+        [SerializeField] private bool useManualSpawnPointOverride = false;
+        [Tooltip("Spawnpoint manual usado quando o override esta ativo.")]
+        [SerializeField] private int manualSpawnPointIndex = 0;
 
         [Header("Randomization")]
         [SerializeField] private bool randomizePlatforms = false;
+        [Tooltip("Usa a licao do curriculum para escalar a randomizacao.")]
+        [SerializeField] private bool useCurriculumForRandomization = true;
+        [Tooltip("Range maximo usado quando a randomizacao estiver no valor final.")]
         [SerializeField] private float platformRandomizationRange = 0.5f;
+        [Tooltip("Range manual usado quando o curriculum esta desligado.")]
+        [SerializeField] private float manualPlatformRandomizationRange = 0.15f;
         [Tooltip("A randomizacao so entra quando a licao do curriculum atingir este valor.")]
         [SerializeField] private int randomizationStartsAtLesson = 1;
         [Tooltip("Licao na qual a randomizacao atinge o valor maximo configurado.")]
@@ -72,6 +81,14 @@ namespace ParkourRL
 
         private Vector3 GetSelectedSpawnPosition()
         {
+            if (useManualSpawnPointOverride && spawnPoints != null && spawnPoints.Count > 0)
+            {
+                manualSpawnPointIndex = Mathf.Clamp(manualSpawnPointIndex, 0, spawnPoints.Count - 1);
+                Transform manualSpawn = spawnPoints[manualSpawnPointIndex];
+                if (manualSpawn != null)
+                    return manualSpawn.position;
+            }
+
             if (spawnPoints != null && spawnPoints.Count > 0)
             {
                 selectedSpawnPointIndex = Mathf.Clamp(selectedSpawnPointIndex, 0, spawnPoints.Count - 1);
@@ -268,12 +285,18 @@ namespace ParkourRL
                 envScript.marioPrefab = this.marioPrefab;
                 envScript.marioMaterial = this.marioMaterial;
                 envScript.randomizePlatforms = this.randomizePlatforms;
+                envScript.useCurriculumForRandomization = this.useCurriculumForRandomization;
                 envScript.platformRandomizationRange = this.platformRandomizationRange;
+                envScript.manualPlatformRandomizationRange = this.manualPlatformRandomizationRange;
+                envScript.randomizationStartsAtLesson = this.randomizationStartsAtLesson;
+                envScript.randomizationMaxesAtLesson = this.randomizationMaxesAtLesson;
                 envScript.spawnPoints = clonedSpawnPoints;
                 envScript.selectedSpawnPointIndex = Mathf.Clamp(this.selectedSpawnPointIndex, 0, clonedSpawnPoints.Count - 1);
                 envScript.useCurriculumLessonForSpawn = this.useCurriculumLessonForSpawn;
                 envScript.curriculumLessonParameter = this.curriculumLessonParameter;
                 envScript.lessonZeroUsesFirstSpawnPoint = this.lessonZeroUsesFirstSpawnPoint;
+                envScript.useManualSpawnPointOverride = this.useManualSpawnPointOverride;
+                envScript.manualSpawnPointIndex = Mathf.Clamp(this.manualSpawnPointIndex, 0, clonedSpawnPoints.Count - 1);
                 
                 // Forca re-inicializacao das posicoes originais APOS os valores (goal, spawn) terem sido copiados!
                 envScript.InitializeOriginalPositions();
@@ -356,6 +379,9 @@ namespace ParkourRL
         {
             if (!randomizePlatforms)
                 return 0f;
+
+            if (!useCurriculumForRandomization)
+                return Mathf.Max(0f, manualPlatformRandomizationRange);
 
             float lessonValue = GetCurriculumLessonValue();
             if (lessonValue < 0f)
