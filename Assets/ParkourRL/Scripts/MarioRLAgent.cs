@@ -31,10 +31,14 @@ namespace ParkourRL
         [SerializeField] private float earlyLessonProgressReward = 0.12f;
         [Tooltip("Bonus por progresso em direcao ao goal nas licoes avancadas.")]
         [SerializeField] private float lateLessonProgressReward = 0.10f;
-        [Tooltip("Punição por andar para tras nas primeiras licoes.")]
+        [Tooltip("Bonus por progresso nas fases 5-8 (repeticao com randomizacao progressiva e full map).")]
+        [SerializeField] private float advancedPhaseProgressReward = 0.15f;
+        [Tooltip("Penalidade por andar para tras nas primeiras licoes.")]
         [SerializeField] private float earlyLessonBackwardPenalty = 0.01f;
-        [Tooltip("Punição por andar para tras nas licoes avancadas.")]
+        [Tooltip("Penalidade por andar para tras nas licoes avancadas.")]
         [SerializeField] private float lateLessonBackwardPenalty = 0.01f;
+        [Tooltip("Recompensa por concluir full map (fases 7+).")]
+        [SerializeField] private float fullMapCompletionBonus = 50.0f;
 
         [HideInInspector] public Vector2 joystickInput;
         [HideInInspector] public bool jumpPressed;
@@ -236,6 +240,7 @@ namespace ParkourRL
             // A punição por permanecer vivo (existencial)
             // Muito reduzida nas primeiras lições para encorajar exploração em vez de congelamento
             bool earlyCurriculum = curriculumLesson < 2f;
+            bool advancedPhase = curriculumLesson >= 5f; // Fases 5-8 com treino avançado
             float existentialPenalty = earlyCurriculum 
                 ? (advancedShaping ? earlyLessonExistentialPenalty * 0.5f : earlyLessonExistentialPenalty * 0.15f)
                 : (advancedShaping ? lateLessonExistentialPenalty : earlyLessonExistentialPenalty);
@@ -248,7 +253,10 @@ namespace ParkourRL
 
                 if (distanceDelta > 0.01f)
                 {
-                    float progressScale = beginnerShaping ? earlyLessonProgressReward * 2.5f : (advancedShaping ? lateLessonProgressReward : earlyLessonProgressReward);
+                    // Fases avançadas recebem recompensa maior para progressão rápida no mapa completo
+                    float progressScale = advancedPhase 
+                        ? advancedPhaseProgressReward 
+                        : (beginnerShaping ? earlyLessonProgressReward * 2.5f : (advancedShaping ? lateLessonProgressReward : earlyLessonProgressReward));
                     AddReward(distanceDelta * progressScale);
                 }
                 else if (distanceDelta < -0.02f)
@@ -356,12 +364,18 @@ namespace ParkourRL
         {
             if (other.CompareTag("Goal"))
             {
+                float curriculumLesson = GetCurriculumLessonValue();
+                bool isFullMapPhase = curriculumLesson >= 7f; // Fases 7+ são full map
+                
                 // Goal atingido merece recompensa absoluta absurda agora
                 float timeRemaining = Mathf.Max(0, MAX_EPISODE_TIME - episodeTime);
                 float timeBonus = (timeRemaining / MAX_EPISODE_TIME) * 50.0f;
+                
+                // Fases full map (7+) recebem bônus especial
+                float goalReward = isFullMapPhase ? fullMapCompletionBonus + 200f : 200f;
 
-                Debug.Log($"[Mario] ====== GOAL! ====== Tempo: {episodeTime:F1}s | TimeBonus: +{timeBonus:F1} | Step: {StepCount}");
-                AddReward(200f + timeBonus); // Recompensa absurda para garantir a fixacao do final
+                Debug.Log($"[Mario] ====== GOAL! ====== Fase: {curriculumLesson:F0} | Tempo: {episodeTime:F1}s | TimeBonus: +{timeBonus:F1} | GoalReward: +{goalReward:F1} | Step: {StepCount}");
+                AddReward(goalReward + timeBonus);
                 EndEpisode();
             }
         }

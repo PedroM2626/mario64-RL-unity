@@ -44,10 +44,18 @@ namespace ParkourRL
         [SerializeField] private float platformRandomizationRange = 0.5f;
         [Tooltip("Range manual usado quando o curriculum esta desligado.")]
         [SerializeField] private float manualPlatformRandomizationRange = 0.15f;
-        [Tooltip("A randomizacao so entra quando a licao do curriculum atingir este valor.")]
-        [SerializeField] private int randomizationStartsAtLesson = 3;
+        [Tooltip("A randomizacao so entra quando a licao do curriculum atingir este valor. Aumentado para 10 para manter licoes 0-4 fixas.")]
+        [SerializeField] private int randomizationStartsAtLesson = 10;
         [Tooltip("Licao na qual a randomizacao atinge o valor maximo configurado.")]
         [SerializeField] private int randomizationMaxesAtLesson = 4;
+
+        [Header("Advanced Phases (5-8)")]
+        [Tooltip("A partir desta licao, começa a usar full map ao invés de platforms individuais.")]
+        [SerializeField] private int fullMapStartsAtLesson = 7;
+        [Tooltip("A partir desta licao, spawn/goal variam aleatoriamente (+/- metros).")]
+        [SerializeField] private int fullMapRandomSpawnStartsAtLesson = 8;
+        [Tooltip("Variação máxima de spawn/goal em metros para fases 8+.")]
+        [SerializeField] private float fullMapSpawnVariationRange = 1.0f;
 
         [Header("Multi-Agent Parallel Training")]
         [SerializeField] private int parallelEnvironments = 4;
@@ -106,29 +114,43 @@ namespace ParkourRL
 
         private Vector3 GetSelectedSpawnPosition()
         {
+            Vector3 baseSpawn = Vector3.zero;
+            
             if (useManualSpawnPointOverride && spawnPoints != null && spawnPoints.Count > 0)
             {
                 manualSpawnPointIndex = Mathf.Clamp(manualSpawnPointIndex, 0, spawnPoints.Count - 1);
                 Transform manualSpawn = spawnPoints[manualSpawnPointIndex];
                 if (manualSpawn != null)
-                    return manualSpawn.position;
+                    baseSpawn = manualSpawn.position;
             }
-
-            if (spawnPoints != null && spawnPoints.Count > 0)
+            else if (spawnPoints != null && spawnPoints.Count > 0)
             {
                 selectedSpawnPointIndex = Mathf.Clamp(selectedSpawnPointIndex, 0, spawnPoints.Count - 1);
                 Transform selectedSpawn = spawnPoints[selectedSpawnPointIndex];
                 if (selectedSpawn != null)
-                    return selectedSpawn.position;
+                    baseSpawn = selectedSpawn.position;
             }
-
-            if (!warnedMissingSpawnPoints)
+            else
             {
-                Debug.LogWarning("[ParkourEnv] Nenhum spawnpoint manual configurado. Usando posicao do ParkourEnvironment.");
-                warnedMissingSpawnPoints = true;
+                if (!warnedMissingSpawnPoints)
+                {
+                    Debug.LogWarning("[ParkourEnv] Nenhum spawnpoint manual configurado. Usando posicao do ParkourEnvironment.");
+                    warnedMissingSpawnPoints = true;
+                }
+                baseSpawn = transform.position;
             }
 
-            return transform.position;
+            // Fases avançadas (8+): adiciona variação aleatória ao spawn
+            float curriculumLesson = GetCurriculumLessonValue();
+            if (curriculumLesson >= fullMapRandomSpawnStartsAtLesson)
+            {
+                float variation = Random.Range(-fullMapSpawnVariationRange, fullMapSpawnVariationRange);
+                baseSpawn.x += variation;
+                baseSpawn.z += variation;
+                Debug.Log($"[ParkourEnv] Phase {curriculumLesson:F0}: Spawn variation +{variation:F2}m");
+            }
+
+            return baseSpawn;
         }
 
         void Start()
@@ -351,6 +373,20 @@ namespace ParkourRL
             if (randomizationRange > 0f)
             {
                 RandomizeSpawnAndGoal(randomizationRange);
+            }
+
+            // Fases avançadas (8+): adiciona variação ao goal também
+            float curriculumLesson = GetCurriculumLessonValue();
+            if (curriculumLesson >= fullMapRandomSpawnStartsAtLesson && goal != null)
+            {
+                float goalVariationX = Random.Range(-fullMapSpawnVariationRange, fullMapSpawnVariationRange);
+                float goalVariationZ = Random.Range(-fullMapSpawnVariationRange, fullMapSpawnVariationRange);
+                goal.position = new Vector3(
+                    goal.position.x + goalVariationX,
+                    goal.position.y,
+                    goal.position.z + goalVariationZ
+                );
+                Debug.Log($"[ParkourEnv] Phase {curriculumLesson:F0}: Goal variation +({goalVariationX:F2}, {goalVariationZ:F2})m");
             }
 
             if (!justSpawned)
