@@ -57,9 +57,24 @@ namespace ParkourRL
         [Tooltip("Variação máxima de spawn/goal em metros para fases 8+.")]
         [SerializeField] private float fullMapSpawnVariationRange = 1.0f;
 
+        [Header("Win-Rate Cycle (Infinite)")]
+        [Tooltip("Quando ativo, ignora avanço por reward e alterna entre mapa fixo e mapa random usando win-rate.")]
+        [SerializeField] private bool useWinRateCycle = true;
+        [Tooltip("Quantidade de episodios usados para calcular win-rate.")]
+        [SerializeField] private int winRateWindowSize = 10;
+        [Tooltip("Taxa minima de vitoria para alternar entre mapa fixo e random.")]
+        [Range(0.0f, 1.0f)]
+        [SerializeField] private float winRateThreshold = 0.7f;
+
         [Header("Multi-Agent Parallel Training")]
         [SerializeField] private int parallelEnvironments = 4;
         [SerializeField] private float environmentSpacing = 30f;
+
+        [Header("Per-Env Diversification")]
+        [Tooltip("Aplica um offset fixo por env (spawn e goal) para evitar decoracao entre envs paralelos.")]
+        [SerializeField] private bool diversifyEachEnvironment = true;
+        [Tooltip("Range em metros do offset por env no plano XZ.")]
+        [SerializeField] private float perEnvironmentVariationRange = 1.0f;
 
         private Vector3 currentSpawnPoint;
         private GameObject currentMario;
@@ -67,8 +82,13 @@ namespace ParkourRL
         private bool warnedMissingSpawnPoints = false;
         private int lastLoggedCurriculumLesson = int.MinValue;
         private int lastLoggedSpawnIndex = int.MinValue;
+        private Vector3 envSpawnOffset = Vector3.zero;
+        private Vector3 envGoalOffset = Vector3.zero;
+        private bool envOffsetsInitialized = false;
         private const float SPAWN_RANDOMIZATION_BOUNDS_FACTOR = 0.45f;
         private const float MIN_RANDOMIZATION_RANGE = 0.05f;
+        private Queue<bool> recentEpisodeResults = new Queue<bool>();
+        private bool randomModeEnabled = false;
         
         private List<ParallelEnvInstance> parallelInstances = new List<ParallelEnvInstance>();
 
@@ -110,6 +130,8 @@ namespace ParkourRL
             currentSpawnPoint = GetSelectedSpawnPosition();
             if (goal != null)
                 originalGoalPosition = goal.position;
+
+            EnsurePerEnvironmentOffsets();
         }
 
         private Vector3 GetSelectedSpawnPosition()
@@ -140,17 +162,38 @@ namespace ParkourRL
                 baseSpawn = transform.position;
             }
 
-            // Fases avançadas (8+): adiciona variação aleatória ao spawn
-            float curriculumLesson = GetCurriculumLessonValue();
-            if (curriculumLesson >= fullMapRandomSpawnStartsAtLesson)
+            return baseSpawn;
+        }
+
+        private void EnsurePerEnvironmentOffsets()
+        {
+            if (envOffsetsInitialized)
+                return;
+
+            envOffsetsInitialized = true;
+
+            if (!diversifyEachEnvironment || perEnvironmentVariationRange <= 0f)
             {
-                float variation = Random.Range(-fullMapSpawnVariationRange, fullMapSpawnVariationRange);
-                baseSpawn.x += variation;
-                baseSpawn.z += variation;
-                Debug.Log($"[ParkourEnv] Phase {curriculumLesson:F0}: Spawn variation +{variation:F2}m");
+                envSpawnOffset = Vector3.zero;
+                envGoalOffset = Vector3.zero;
+                return;
             }
 
-            return baseSpawn;
+            float spawnX = Random.Range(-perEnvironmentVariationRange, perEnvironmentVariationRange);
+            float spawnZ = Random.Range(-perEnvironmentVariationRange, perEnvironmentVariationRange);
+            float goalX = Random.Range(-perEnvironmentVariationRange, perEnvironmentVariationRange);
+            float goalZ = Random.Range(-perEnvironmentVariationRange, perEnvironmentVariationRange);
+
+            envSpawnOffset = new Vector3(spawnX, 0f, spawnZ);
+            envGoalOffset = new Vector3(goalX, 0f, goalZ);
+        }
+
+        private void ApplyPerEnvironmentOffsets()
+        {
+            EnsurePerEnvironmentOffsets();
+            currentSpawnPoint += envSpawnOffset;
+            if (goal != null)
+                goal.position += envGoalOffset;
         }
 
         void Start()
@@ -180,6 +223,7 @@ namespace ParkourRL
             // PASSO 4: Aplicar selecao por curriculum antes do primeiro spawn
             UpdateSpawnSelectionFromCurriculum();
             currentSpawnPoint = GetSelectedSpawnPosition();
+            ApplyPerEnvironmentOffsets();
 
             // PASSO 5: Spawnar Mario
             SpawnMario();
@@ -347,6 +391,8 @@ namespace ParkourRL
                 envScript.lessonZeroUsesFirstSpawnPoint = this.lessonZeroUsesFirstSpawnPoint;
                 envScript.useManualSpawnPointOverride = this.useManualSpawnPointOverride;
                 envScript.manualSpawnPointIndex = Mathf.Clamp(this.manualSpawnPointIndex, 0, clonedSpawnPoints.Count - 1);
+                envScript.diversifyEachEnvironment = this.diversifyEachEnvironment;
+                envScript.perEnvironmentVariationRange = this.perEnvironmentVariationRange;
                 
                 // Forca re-inicializacao das posicoes originais APOS os valores (goal, spawn) terem sido copiados!
                 envScript.InitializeOriginalPositions();
@@ -364,6 +410,7 @@ namespace ParkourRL
 
         public void ResetEnvironment()
         {
+            EnsurePerEnvironmentOffsets();
             UpdateSpawnSelectionFromCurriculum();
             currentSpawnPoint = GetSelectedSpawnPosition();
             if (goal != null)
@@ -375,19 +422,27 @@ namespace ParkourRL
                 RandomizeSpawnAndGoal(randomizationRange);
             }
 
-            // Fases avançadas (8+): adiciona variação ao goal também
-            float curriculumLesson = GetCurriculumLessonValue();
-            if (curriculumLesson >= fullMapRandomSpawnStartsAtLesson && goal != null)
+            // No modo random do ciclo infinito, aplica variacao adicional no spawn e no goal.
+            if (useWinRateCycle && randomModeEnabled)
             {
-                float goalVariationX = Random.Range(-fullMapSpawnVariationRange, fullMapSpawnVariationRange);
-                float goalVariationZ = Random.Range(-fullMapSpawnVariationRange, fullMapSpawnVariationRange);
-                goal.position = new Vector3(
-                    goal.position.x + goalVariationX,
-                    goal.position.y,
-                    goal.position.z + goalVariationZ
-                );
-                Debug.Log($"[ParkourEnv] Phase {curriculumLesson:F0}: Goal variation +({goalVariationX:F2}, {goalVariationZ:F2})m");
+                float spawnVariationX = Random.Range(-fullMapSpawnVariationRange, fullMapSpawnVariationRange);
+                float spawnVariationZ = Random.Range(-fullMapSpawnVariationRange, fullMapSpawnVariationRange);
+                currentSpawnPoint += new Vector3(spawnVariationX, 0f, spawnVariationZ);
+
+                if (goal != null)
+                {
+                    float goalVariationX = Random.Range(-fullMapSpawnVariationRange, fullMapSpawnVariationRange);
+                    float goalVariationZ = Random.Range(-fullMapSpawnVariationRange, fullMapSpawnVariationRange);
+                    goal.position = new Vector3(
+                        goal.position.x + goalVariationX,
+                        goal.position.y,
+                        goal.position.z + goalVariationZ
+                    );
+                    Debug.Log($"[ParkourEnv] RandomMode: Spawn +({spawnVariationX:F2}, {spawnVariationZ:F2})m | Goal +({goalVariationX:F2}, {goalVariationZ:F2})m");
+                }
             }
+
+            ApplyPerEnvironmentOffsets();
 
             if (!justSpawned)
             {
@@ -429,6 +484,9 @@ namespace ParkourRL
 
         private float GetCurriculumLessonValue()
         {
+            if (useWinRateCycle)
+                return 0f;
+
             if (!useCurriculumLessonForSpawn)
                 return -1f;
 
@@ -479,6 +537,9 @@ namespace ParkourRL
 
         private void UpdateSpawnSelectionFromCurriculum()
         {
+            if (useWinRateCycle)
+                return;
+
             if (!useCurriculumLessonForSpawn || spawnPoints == null || spawnPoints.Count == 0)
                 return;
 
@@ -502,6 +563,41 @@ namespace ParkourRL
                 Debug.Log($"[ParkourEnv] Curriculum '{curriculumLessonParameter}'={lesson} => spawnPoints[{selectedSpawnPointIndex}]");
                 lastLoggedCurriculumLesson = lesson;
                 lastLoggedSpawnIndex = selectedSpawnPointIndex;
+            }
+        }
+
+        public void ReportEpisodeResult(bool success)
+        {
+            if (!useWinRateCycle)
+                return;
+
+            int targetWindow = Mathf.Max(1, winRateWindowSize);
+            recentEpisodeResults.Enqueue(success);
+            while (recentEpisodeResults.Count > targetWindow)
+            {
+                recentEpisodeResults.Dequeue();
+            }
+
+            if (recentEpisodeResults.Count < targetWindow)
+                return;
+
+            int wins = 0;
+            foreach (bool result in recentEpisodeResults)
+            {
+                if (result)
+                    wins++;
+            }
+
+            float winRate = (float)wins / targetWindow;
+            if (winRate >= winRateThreshold)
+            {
+                randomModeEnabled = !randomModeEnabled;
+                recentEpisodeResults.Clear();
+                Debug.Log($"[ParkourEnv] Win-rate {winRate:P0} atingiu meta ({winRateThreshold:P0}). Alternando modo para {(randomModeEnabled ? "RANDOM" : "FIXO")}.");
+            }
+            else
+            {
+                Debug.Log($"[ParkourEnv] Win-rate atual: {winRate:P0} ({wins}/{targetWindow}) | Modo: {(randomModeEnabled ? "RANDOM" : "FIXO")}");
             }
         }
 
@@ -574,11 +670,11 @@ namespace ParkourRL
             // 2 acoes continuas (joystick X/Y) + 1 discreta (Jump com 2 opcoes: 0=nao, 1=sim)
             behaviorParams.BrainParameters.ActionSpec = new Unity.MLAgents.Actuators.ActionSpec(2, new int[] { 2 });
 
-            // Decision Requester (DecisionPeriod=5 para evitar movimentos espasmodicos)
+            // Decision Requester (estilo old: 2 para respostas mais rapidas em plataforma/salto)
             var decisionRequester = currentMario.GetComponent<Unity.MLAgents.DecisionRequester>();
             if (decisionRequester == null)
                 decisionRequester = currentMario.AddComponent<Unity.MLAgents.DecisionRequester>();
-            decisionRequester.DecisionPeriod = 5;
+            decisionRequester.DecisionPeriod = 2;
             decisionRequester.TakeActionsBetweenDecisions = true;
 
             agent.SetEnvironment(this);
@@ -594,10 +690,19 @@ namespace ParkourRL
         {
             if (currentMario != null)
             {
+                Vector3 respawnPosition = currentSpawnPoint + Vector3.up * 2f;
                 SM64Mario sm64Mario = currentMario.GetComponent<SM64Mario>();
                 if (sm64Mario != null)
                 {
-                    Vector3 respawnPosition = currentSpawnPoint + Vector3.up * 2f;
+                    currentMario.transform.position = respawnPosition;
+
+                    Rigidbody rb = currentMario.GetComponent<Rigidbody>();
+                    if (rb != null)
+                    {
+                        rb.velocity = Vector3.zero;
+                        rb.angularVelocity = Vector3.zero;
+                    }
+
                     if (sm64Mario.isActiveAndEnabled)
                     {
                         sm64Mario.Teleport(respawnPosition);
@@ -609,12 +714,41 @@ namespace ParkourRL
                 }
                 else
                 {
-                    currentMario.transform.position = currentSpawnPoint + Vector3.up * 2f;
+                    currentMario.transform.position = respawnPosition;
                 }
+
+                StartCoroutine(ValidateRespawnPosition(respawnPosition));
             }
             else
             {
                 SpawnMario();
+            }
+        }
+
+        private IEnumerator ValidateRespawnPosition(Vector3 expectedPosition)
+        {
+            yield return new WaitForFixedUpdate();
+
+            if (currentMario == null)
+                yield break;
+
+            Vector3 marioPos = currentMario.transform.position;
+            float horizontalDistance = Vector3.Distance(
+                new Vector3(marioPos.x, 0f, marioPos.z),
+                new Vector3(expectedPosition.x, 0f, expectedPosition.z)
+            );
+
+            bool invalidRespawn = horizontalDistance > 1.5f || marioPos.y < (expectedPosition.y - 1.0f);
+            if (!invalidRespawn)
+                yield break;
+
+            Debug.LogWarning($"[ParkourEnv] Respawn inconsistente detectado. Forcando reposicionamento. Esperado={expectedPosition} Atual={marioPos}");
+
+            SM64Mario sm64Mario = currentMario.GetComponent<SM64Mario>();
+            currentMario.transform.position = expectedPosition;
+            if (sm64Mario != null && sm64Mario.isActiveAndEnabled)
+            {
+                sm64Mario.Teleport(expectedPosition);
             }
         }
 

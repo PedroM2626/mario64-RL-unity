@@ -11,7 +11,7 @@ public class Spinner : MonoBehaviour
         terrain = GetComponent<LibSM64.SM64DynamicTerrain>();
         if (terrain == null)
         {
-            Debug.LogWarning("[Spinner] SM64DynamicTerrain nao encontrado neste objeto. Spinner sera desabilitado.");
+            Debug.Log("[Spinner] SM64DynamicTerrain nao encontrado neste objeto. Spinner desabilitado para este objeto.");
             enabled = false;
         }
     }

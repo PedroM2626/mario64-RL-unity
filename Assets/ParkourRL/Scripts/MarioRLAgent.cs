@@ -39,6 +39,8 @@ namespace ParkourRL
         [SerializeField] private float lateLessonBackwardPenalty = 0.01f;
         [Tooltip("Recompensa por concluir full map (fases 7+).")]
         [SerializeField] private float fullMapCompletionBonus = 50.0f;
+        [Tooltip("Pequeno bonus por tentar saltar e ganhar altura, para evitar congelamento nas plataformas.")]
+        [SerializeField] private float jumpAttemptReward = 0.05f;
 
         [HideInInspector] public Vector2 joystickInput;
         [HideInInspector] public bool jumpPressed;
@@ -54,8 +56,9 @@ namespace ParkourRL
         private float bestDistanceToGoal;
         private float bestDistanceWhileGrounded; // Rastreia o progresso SEGURO (quando ele pousa em uma plataforma)
         private float bestCompletionTime; // Melhor tempo de conclusao entre episodios
+        private bool episodeResultReported;
 
-        private const float MAX_EPISODE_TIME = 60f; // Mais tempo (mapa maior)
+        private const float MAX_EPISODE_TIME = 30f; // Estilo old: mais episodios por hora para convergir mais rapido
         
         // Cache array for Raycasts to prevent ALLOC_TEMP_MAIN leakage
         private RaycastHit[] raycastHitsCache = new RaycastHit[1];
@@ -111,6 +114,7 @@ namespace ParkourRL
             bestDistanceWhileGrounded = initialDistanceToGoal; // Inicia a distancia segura
             previousPosition = transform.position;
             episodeTime = 0f;
+            episodeResultReported = false;
 
         }
 
@@ -218,96 +222,46 @@ namespace ParkourRL
                     cameraLookDirection = Vector3.forward;
             }
 
-            // ========== SISTEMA DE RECOMPENSAS CORRIGIDO ==========
+            // ========== REWARD ESTILO OLD (COMPLETAR PARKOUR DE VERDADE) ==========
             episodeTime += Time.fixedDeltaTime;
             Vector3 currentPos = transform.position;
             float currentDistance = GetDistanceToGoal();
-            float curriculumLesson = GetCurriculumLessonValue();
-
-            // -- MODO CRUEL (VELOCIDADE MINIMA E DIRECAO OBRIGATORIA) --
-            // Calculamos a velocidade vetorial exata NA DIRECAO do objetivo
-            Vector3 velocity = (currentPos - previousPosition) / Time.fixedDeltaTime;
-            Vector3 dirToGoal = Vector3.zero;
-            if (targetGoal != null)
-            {
-                dirToGoal = (targetGoal.position - currentPos).normalized;
-            }
-            float speedTowardsGoal = Vector3.Dot(velocity, dirToGoal);
             float distanceDelta = previousDistanceToGoal - currentDistance;
-            bool advancedShaping = curriculumLesson >= aggressiveShapingStartsAtLesson;
-            bool beginnerShaping = curriculumLesson < 1f;
 
-            // A punição por permanecer vivo (existencial)
-            // Muito reduzida nas primeiras lições para encorajar exploração em vez de congelamento
-            bool earlyCurriculum = curriculumLesson < 2f;
-            bool advancedPhase = curriculumLesson >= 5f; // Fases 5-8 com treino avançado
-            float existentialPenalty = earlyCurriculum 
-                ? (advancedShaping ? earlyLessonExistentialPenalty * 0.5f : earlyLessonExistentialPenalty * 0.15f)
-                : (advancedShaping ? lateLessonExistentialPenalty : earlyLessonExistentialPenalty);
-            
-            // Periodo de graca de 2.0s para ele nascer, cair na plataforma e comecar a correr sem ser punido injustamente
-            if (episodeTime > 2.0f)
+            // Pressao temporal clara para evitar ficar parado em uma plataforma.
+            AddReward(-0.01f);
+
+            // Recompensa densa por progresso real na direcao do goal.
+            if (distanceDelta > 0.01f)
             {
-                // No inicio do curriculum, reduzimos a pressão para o agente não "congelar" por medo de cair.
-                AddReward(beginnerShaping ? existentialPenalty * 0.25f : existentialPenalty);
-
-                if (distanceDelta > 0.01f)
-                {
-                    // Fases avançadas recebem recompensa maior para progressão rápida no mapa completo
-                    float progressScale = advancedPhase 
-                        ? advancedPhaseProgressReward 
-                        : (beginnerShaping ? earlyLessonProgressReward * 2.5f : (advancedShaping ? lateLessonProgressReward : earlyLessonProgressReward));
-                    AddReward(distanceDelta * progressScale);
-                }
-                else if (distanceDelta < -0.02f)
-                {
-                    float backwardScale = beginnerShaping ? earlyLessonBackwardPenalty * 0.25f : (advancedShaping ? lateLessonBackwardPenalty : earlyLessonBackwardPenalty);
-                    AddReward(distanceDelta * backwardScale);
-                }
-
-                // Nas lições mais avançadas, exige velocidade minima para evitar rastejar sem evoluir.
-                if (curriculumLesson >= 3f && speedTowardsGoal < 2.0f)
-                {
-                    AddReward(-0.05f);
-                }
+                AddReward(distanceDelta * 1.0f);
             }
 
-            // Removida a recompensa de distanceDelta contínua. Ele não é mais pago por "se jogar" no ar.
-            // Ele só tem duas opções: Correr para frente na plataforma, ou pular para a próxima.
-
-            // -- RECOMPENSA POR ALCANCAR NOVA PLATAFORMA (NOVO MARCO SEGURO) --
-            // Checamos se ele esta pisando em algo firme (chao)
-            bool isGrounded = Physics.RaycastNonAlloc(currentPos + Vector3.up * 0.1f, Vector3.down, raycastHitsCache, 0.5f) > 0;
-            
-            // Em licao inicial, marcos menores e recompensas maiores evitam travamento.
-            // Lição 1 ainda é "iniciante" em termos de recompensa por alcançar plataformas.
-            float groundedMilestone = earlyCurriculum ? 0.8f : 4.0f;
-            if (isGrounded && currentDistance < bestDistanceWhileGrounded - groundedMilestone)
+            // Marco intermediario de progresso para estabilizar exploracao.
+            if (currentDistance < bestDistanceToGoal - 2.0f)
             {
-                float improvement = bestDistanceWhileGrounded - currentDistance;
-                float milestoneReward = earlyCurriculum ? 16.0f : 28.0f;
-                AddReward(milestoneReward);
-                bestDistanceWhileGrounded = currentDistance;
-                Debug.Log($"[Mario] PLATAFORMA ALCANCADA! Nova distancia segura: {bestDistanceWhileGrounded:F1} | Reward: +{milestoneReward:F1}");
+                AddReward(2.0f);
+                bestDistanceToGoal = currentDistance;
             }
 
             previousDistanceToGoal = currentDistance;
             previousPosition = currentPos;
 
-            // -- MORTE POR QUEDA --
-            // Morte é penalidade leve: encoraja pulos, mas não catastrófica
+            // Queda: penalidade forte, mas sem impedir exploracao por completo.
             if (currentPos.y < startPosition.y - 3.0f)
             {
-                AddReward(beginnerShaping ? -4.0f : -6.0f);
+                AddReward(-5.0f);
+                ReportEpisodeResult(false);
                 EndEpisode();
                 return;
             }
 
-            // -- TIMEOUT --
-            // Timeout também é suave: incentiva persistência sem desespero
+            // Timeout proporcional ao progresso (estilo old): pune travamento, recompensa tentativa real.
             if (episodeTime >= MAX_EPISODE_TIME)
             {
-                AddReward(beginnerShaping ? -6.0f : -8.0f);
+                float progressRatio = 1.0f - (currentDistance / Mathf.Max(initialDistanceToGoal, 0.1f));
+                AddReward(-5.0f + progressRatio * 3.0f);
+                ReportEpisodeResult(false);
                 EndEpisode();
                 return;
             }
@@ -364,19 +318,21 @@ namespace ParkourRL
         {
             if (other.CompareTag("Goal"))
             {
-                float curriculumLesson = GetCurriculumLessonValue();
-                bool isFullMapPhase = curriculumLesson >= 7f; // Fases 7+ são full map
-                
-                // Goal atingido merece recompensa absoluta absurda agora
-                float timeRemaining = Mathf.Max(0, MAX_EPISODE_TIME - episodeTime);
-                float timeBonus = (timeRemaining / MAX_EPISODE_TIME) * 50.0f;
-                
-                // Fases full map (7+) recebem bônus especial
-                float goalReward = isFullMapPhase ? fullMapCompletionBonus + 200f : 200f;
-
-                Debug.Log($"[Mario] ====== GOAL! ====== Fase: {curriculumLesson:F0} | Tempo: {episodeTime:F1}s | TimeBonus: +{timeBonus:F1} | GoalReward: +{goalReward:F1} | Step: {StepCount}");
-                AddReward(goalReward + timeBonus);
+                AddReward(50f);
+                ReportEpisodeResult(true);
                 EndEpisode();
+            }
+        }
+
+        private void ReportEpisodeResult(bool success)
+        {
+            if (episodeResultReported)
+                return;
+
+            episodeResultReported = true;
+            if (environment != null)
+            {
+                environment.ReportEpisodeResult(success);
             }
         }
 
