@@ -459,7 +459,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 12, y: -8, z: 0}
-  m_LocalScale: {x: 2.44, y: 20, z: 6}
+  m_LocalScale: {x: 6.12, y: 20, z: 11.35}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -580,7 +580,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 27.4, y: -8, z: 0}
-  m_LocalScale: {x: 6, y: 20, z: 2.78}
+  m_LocalScale: {x: 9.83, y: 20, z: 11.01}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -700,7 +700,7 @@ Transform:
   m_GameObject: {fileID: 100000050}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 74.37, y: -8, z: 0}
+  m_LocalPosition: {x: 64.21, y: -8, z: 6.88}
   m_LocalScale: {x: 8, y: 20, z: 8}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -939,7 +939,7 @@ Transform:
   m_GameObject: {fileID: 100000080}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 74.600006, y: 2.63, z: 0}
+  m_LocalPosition: {x: 64.44, y: 2.63, z: 6.88}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1059,6 +1059,9 @@ MonoBehaviour:
   marioPrefab: {fileID: 2518639426973004745, guid: 8772da6d9ed00381fb7365a5f1b52114,
     type: 3}
   marioMaterial: {fileID: 2100000, guid: db0929541b7d4e749826b59a52ac58e3, type: 2}
+  useWarmStartModel: 0
+  warmStartModel: {fileID: 0}
+  warmStartModelAssetPath: 
   goal: {fileID: 100000081}
   spawnPoints:
   - {fileID: 787085027}
@@ -1070,9 +1073,15 @@ MonoBehaviour:
   useCurriculumLessonForSpawn: 1
   curriculumLessonParameter: spawn_lesson
   lessonZeroUsesFirstSpawnPoint: 1
+  useManualSpawnPointOverride: 0
+  manualSpawnPointIndex: 0
   randomizePlatforms: 1
+  useCurriculumForRandomization: 1
   platformRandomizationRange: 1
-  parallelEnvironments: 10
+  manualPlatformRandomizationRange: 0.15
+  randomizationStartsAtLesson: 1
+  randomizationMaxesAtLesson: 4
+  parallelEnvironments: 4
   environmentSpacing: 30
 --- !u!1 &220275160
 GameObject:
@@ -1475,7 +1484,7 @@ Transform:
   m_GameObject: {fileID: 1060199445}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 40.519997, y: -8, z: 6.37}
+  m_LocalPosition: {x: 43.2, y: -8, z: 6.37}
   m_LocalScale: {x: 6, y: 20, z: 14.46}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1628,7 +1637,7 @@ Transform:
   m_GameObject: {fileID: 1970275185}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 40.26, y: 2.63, z: 6.39}
+  m_LocalPosition: {x: 43.2, y: 2.63, z: 6.39}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

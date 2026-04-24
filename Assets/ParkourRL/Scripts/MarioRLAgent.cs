@@ -28,13 +28,13 @@ namespace ParkourRL
         [Tooltip("Penalidade base por passo nas licoes mais avancadas.")]
         [SerializeField] private float lateLessonExistentialPenalty = -0.05f;
         [Tooltip("Bonus por progresso em direcao ao goal nas primeiras licoes.")]
-        [SerializeField] private float earlyLessonProgressReward = 0.20f;
+        [SerializeField] private float earlyLessonProgressReward = 0.12f;
         [Tooltip("Bonus por progresso em direcao ao goal nas licoes avancadas.")]
-        [SerializeField] private float lateLessonProgressReward = 0.10f;
+        [SerializeField] private float lateLessonProgressReward = 0.06f;
         [Tooltip("Punição por andar para tras nas primeiras licoes.")]
-        [SerializeField] private float earlyLessonBackwardPenalty = 0.02f;
+        [SerializeField] private float earlyLessonBackwardPenalty = 0.01f;
         [Tooltip("Punição por andar para tras nas licoes avancadas.")]
-        [SerializeField] private float lateLessonBackwardPenalty = 0.04f;
+        [SerializeField] private float lateLessonBackwardPenalty = 0.02f;
 
         [HideInInspector] public Vector2 joystickInput;
         [HideInInspector] public bool jumpPressed;
@@ -231,6 +231,7 @@ namespace ParkourRL
             float speedTowardsGoal = Vector3.Dot(velocity, dirToGoal);
             float distanceDelta = previousDistanceToGoal - currentDistance;
             bool advancedShaping = curriculumLesson >= aggressiveShapingStartsAtLesson;
+            bool beginnerShaping = curriculumLesson < 1f;
 
             // A punição por permanecer vivo (existencial)
             float existentialPenalty = advancedShaping ? lateLessonExistentialPenalty : earlyLessonExistentialPenalty;
@@ -238,21 +239,24 @@ namespace ParkourRL
             // Periodo de graca de 1.5s para ele nascer, cair na plataforma e comecar a correr sem ser punido injustamente
             if (episodeTime > 1.5f)
             {
-                AddReward(existentialPenalty);
+                // No inicio do curriculum, reduzimos a pressão para o agente não "congelar" por medo de cair.
+                AddReward(beginnerShaping ? existentialPenalty * 0.25f : existentialPenalty);
 
-                if (distanceDelta > 0f)
+                if (distanceDelta > 0.01f)
                 {
-                    AddReward(distanceDelta * (advancedShaping ? lateLessonProgressReward : earlyLessonProgressReward));
+                    float progressScale = beginnerShaping ? earlyLessonProgressReward * 2.5f : (advancedShaping ? lateLessonProgressReward : earlyLessonProgressReward);
+                    AddReward(distanceDelta * progressScale);
                 }
-                else if (distanceDelta < 0f)
+                else if (distanceDelta < -0.02f)
                 {
-                    AddReward(distanceDelta * (advancedShaping ? lateLessonBackwardPenalty : earlyLessonBackwardPenalty));
+                    float backwardScale = beginnerShaping ? earlyLessonBackwardPenalty * 0.25f : (advancedShaping ? lateLessonBackwardPenalty : earlyLessonBackwardPenalty);
+                    AddReward(distanceDelta * backwardScale);
                 }
 
                 // Nas lições mais avançadas, exige velocidade minima para evitar rastejar sem evoluir.
-                if (advancedShaping && speedTowardsGoal < 2.0f)
+                if (curriculumLesson >= 3f && speedTowardsGoal < 2.0f)
                 {
-                    AddReward(-0.25f);
+                    AddReward(-0.12f);
                 }
             }
 
@@ -263,13 +267,15 @@ namespace ParkourRL
             // Checamos se ele esta pisando em algo firme (chao)
             bool isGrounded = Physics.RaycastNonAlloc(currentPos + Vector3.up * 0.1f, Vector3.down, raycastHitsCache, 0.5f) > 0;
             
-            // Se ele estiver no chao e avancou pelo menos 4 unidades em relacao a ultima vez que esteve no chao
-            if (isGrounded && currentDistance < bestDistanceWhileGrounded - 4.0f)
+            // Em licao inicial, marcos menores evitam que ele fique preso na primeira plataforma.
+            float groundedMilestone = beginnerShaping ? 1.25f : 4.0f;
+            if (isGrounded && currentDistance < bestDistanceWhileGrounded - groundedMilestone)
             {
                 float improvement = bestDistanceWhileGrounded - currentDistance;
-                AddReward(50.0f); // Recompensa GIGANTE por alcancar um lugar seguro novo
+                float milestoneReward = beginnerShaping ? 12.0f : 25.0f;
+                AddReward(milestoneReward);
                 bestDistanceWhileGrounded = currentDistance;
-                Debug.Log($"[Mario] PLATAFORMA ALCANCADA! Nova distancia segura: {bestDistanceWhileGrounded:F1} | Reward: +50");
+                Debug.Log($"[Mario] PLATAFORMA ALCANCADA! Nova distancia segura: {bestDistanceWhileGrounded:F1} | Reward: +{milestoneReward:F1}");
             }
 
             previousDistanceToGoal = currentDistance;
@@ -280,7 +286,7 @@ namespace ParkourRL
             // Isso tira o medo de pular.
             if (currentPos.y < startPosition.y - 3.0f)
             {
-                AddReward(-10.0f); 
+                AddReward(beginnerShaping ? -4.0f : -10.0f);
                 EndEpisode();
                 return;
             }
@@ -288,7 +294,7 @@ namespace ParkourRL
             // -- TIMEOUT --
             if (episodeTime >= MAX_EPISODE_TIME)
             {
-                AddReward(-10.0f); 
+                AddReward(beginnerShaping ? -6.0f : -10.0f);
                 EndEpisode();
                 return;
             }

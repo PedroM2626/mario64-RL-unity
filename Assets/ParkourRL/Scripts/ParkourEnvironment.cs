@@ -2,6 +2,7 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using LibSM64;
+using Unity.Barracuda;
 
 namespace ParkourRL
 {
@@ -10,6 +11,11 @@ namespace ParkourRL
         [Header("Mario Setup")]
         [SerializeField] private GameObject marioPrefab;
         [SerializeField] private Material marioMaterial;
+        [Tooltip("Usa um modelo base para warm-start do Mario no BehaviorParameters.")]
+        [SerializeField] private bool useWarmStartModel = true;
+        [SerializeField] private NNModel warmStartModel;
+        [Tooltip("Caminho do asset para auto-carregar o modelo no editor quando o campo acima estiver vazio.")]
+        [SerializeField] private string warmStartModelAssetPath = "Assets/ParkourRL/Models/mario_parkour_baseV1.onnx";
 
         [Header("Level Elements")]
         [SerializeField] private Transform goal;
@@ -69,7 +75,26 @@ namespace ParkourRL
 
         void Awake()
         {
+            TryResolveWarmStartModel();
             InitializeOriginalPositions();
+        }
+
+        void OnValidate()
+        {
+            TryResolveWarmStartModel();
+        }
+
+        private void TryResolveWarmStartModel()
+        {
+            if (!useWarmStartModel || warmStartModel != null)
+                return;
+
+            #if UNITY_EDITOR
+            if (!string.IsNullOrWhiteSpace(warmStartModelAssetPath))
+            {
+                warmStartModel = UnityEditor.AssetDatabase.LoadAssetAtPath<NNModel>(warmStartModelAssetPath);
+            }
+            #endif
         }
 
         public void InitializeOriginalPositions()
@@ -284,6 +309,9 @@ namespace ParkourRL
                 envScript.goal = goalClone != null ? goalClone.transform : null;
                 envScript.marioPrefab = this.marioPrefab;
                 envScript.marioMaterial = this.marioMaterial;
+                envScript.useWarmStartModel = this.useWarmStartModel;
+                envScript.warmStartModel = this.warmStartModel;
+                envScript.warmStartModelAssetPath = this.warmStartModelAssetPath;
                 envScript.randomizePlatforms = this.randomizePlatforms;
                 envScript.useCurriculumForRandomization = this.useCurriculumForRandomization;
                 envScript.platformRandomizationRange = this.platformRandomizationRange;
@@ -500,6 +528,11 @@ namespace ParkourRL
             
             behaviorParams.BehaviorName = "MarioParkour";
             behaviorParams.BehaviorType = Unity.MLAgents.Policies.BehaviorType.Default;
+            TryResolveWarmStartModel();
+            if (useWarmStartModel && warmStartModel != null)
+            {
+                behaviorParams.Model = warmStartModel;
+            }
             behaviorParams.BrainParameters.VectorObservationSize = 30;
             behaviorParams.BrainParameters.NumStackedVectorObservations = 1;
             // 2 acoes continuas (joystick X/Y) + 1 discreta (Jump com 2 opcoes: 0=nao, 1=sim)

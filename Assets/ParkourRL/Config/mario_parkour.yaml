@@ -38,7 +38,7 @@ engine_settings:
   width: 1280
   height: 720
   quality_level: 2
-  time_scale: 1.0
+  time_scale: 10.0
   target_frame_rate: -1
   capture_frame_rate: 60
   no_graphics: false
