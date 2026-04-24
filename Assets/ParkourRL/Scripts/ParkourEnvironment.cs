@@ -45,7 +45,7 @@ namespace ParkourRL
         [Tooltip("Range manual usado quando o curriculum esta desligado.")]
         [SerializeField] private float manualPlatformRandomizationRange = 0.15f;
         [Tooltip("A randomizacao so entra quando a licao do curriculum atingir este valor.")]
-        [SerializeField] private int randomizationStartsAtLesson = 1;
+        [SerializeField] private int randomizationStartsAtLesson = 3;
         [Tooltip("Licao na qual a randomizacao atinge o valor maximo configurado.")]
         [SerializeField] private int randomizationMaxesAtLesson = 4;
 

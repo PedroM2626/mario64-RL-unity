@@ -26,15 +26,15 @@ namespace ParkourRL
         [Tooltip("Penalidade base por passo nas primeiras licoes.")]
         [SerializeField] private float earlyLessonExistentialPenalty = -0.01f;
         [Tooltip("Penalidade base por passo nas licoes mais avancadas.")]
-        [SerializeField] private float lateLessonExistentialPenalty = -0.05f;
+        [SerializeField] private float lateLessonExistentialPenalty = -0.02f;
         [Tooltip("Bonus por progresso em direcao ao goal nas primeiras licoes.")]
         [SerializeField] private float earlyLessonProgressReward = 0.12f;
         [Tooltip("Bonus por progresso em direcao ao goal nas licoes avancadas.")]
-        [SerializeField] private float lateLessonProgressReward = 0.06f;
+        [SerializeField] private float lateLessonProgressReward = 0.10f;
         [Tooltip("Punição por andar para tras nas primeiras licoes.")]
         [SerializeField] private float earlyLessonBackwardPenalty = 0.01f;
         [Tooltip("Punição por andar para tras nas licoes avancadas.")]
-        [SerializeField] private float lateLessonBackwardPenalty = 0.02f;
+        [SerializeField] private float lateLessonBackwardPenalty = 0.01f;
 
         [HideInInspector] public Vector2 joystickInput;
         [HideInInspector] public bool jumpPressed;
@@ -234,10 +234,14 @@ namespace ParkourRL
             bool beginnerShaping = curriculumLesson < 1f;
 
             // A punição por permanecer vivo (existencial)
-            float existentialPenalty = advancedShaping ? lateLessonExistentialPenalty : earlyLessonExistentialPenalty;
+            // Muito reduzida nas primeiras lições para encorajar exploração em vez de congelamento
+            bool earlyCurriculum = curriculumLesson < 2f;
+            float existentialPenalty = earlyCurriculum 
+                ? (advancedShaping ? earlyLessonExistentialPenalty * 0.5f : earlyLessonExistentialPenalty * 0.15f)
+                : (advancedShaping ? lateLessonExistentialPenalty : earlyLessonExistentialPenalty);
             
-            // Periodo de graca de 1.5s para ele nascer, cair na plataforma e comecar a correr sem ser punido injustamente
-            if (episodeTime > 1.5f)
+            // Periodo de graca de 2.0s para ele nascer, cair na plataforma e comecar a correr sem ser punido injustamente
+            if (episodeTime > 2.0f)
             {
                 // No inicio do curriculum, reduzimos a pressão para o agente não "congelar" por medo de cair.
                 AddReward(beginnerShaping ? existentialPenalty * 0.25f : existentialPenalty);
@@ -256,7 +260,7 @@ namespace ParkourRL
                 // Nas lições mais avançadas, exige velocidade minima para evitar rastejar sem evoluir.
                 if (curriculumLesson >= 3f && speedTowardsGoal < 2.0f)
                 {
-                    AddReward(-0.12f);
+                    AddReward(-0.05f);
                 }
             }
 
@@ -267,12 +271,13 @@ namespace ParkourRL
             // Checamos se ele esta pisando em algo firme (chao)
             bool isGrounded = Physics.RaycastNonAlloc(currentPos + Vector3.up * 0.1f, Vector3.down, raycastHitsCache, 0.5f) > 0;
             
-            // Em licao inicial, marcos menores evitam que ele fique preso na primeira plataforma.
-            float groundedMilestone = beginnerShaping ? 1.25f : 4.0f;
+            // Em licao inicial, marcos menores e recompensas maiores evitam travamento.
+            // Lição 1 ainda é "iniciante" em termos de recompensa por alcançar plataformas.
+            float groundedMilestone = earlyCurriculum ? 0.8f : 4.0f;
             if (isGrounded && currentDistance < bestDistanceWhileGrounded - groundedMilestone)
             {
                 float improvement = bestDistanceWhileGrounded - currentDistance;
-                float milestoneReward = beginnerShaping ? 12.0f : 25.0f;
+                float milestoneReward = earlyCurriculum ? 16.0f : 28.0f;
                 AddReward(milestoneReward);
                 bestDistanceWhileGrounded = currentDistance;
                 Debug.Log($"[Mario] PLATAFORMA ALCANCADA! Nova distancia segura: {bestDistanceWhileGrounded:F1} | Reward: +{milestoneReward:F1}");
@@ -282,19 +287,19 @@ namespace ParkourRL
             previousPosition = currentPos;
 
             // -- MORTE POR QUEDA --
-            // A morte não é tão assustadora agora (equiparável a ficar 5 frames parado).
-            // Isso tira o medo de pular.
+            // Morte é penalidade leve: encoraja pulos, mas não catastrófica
             if (currentPos.y < startPosition.y - 3.0f)
             {
-                AddReward(beginnerShaping ? -4.0f : -10.0f);
+                AddReward(beginnerShaping ? -4.0f : -6.0f);
                 EndEpisode();
                 return;
             }
 
             // -- TIMEOUT --
+            // Timeout também é suave: incentiva persistência sem desespero
             if (episodeTime >= MAX_EPISODE_TIME)
             {
-                AddReward(beginnerShaping ? -6.0f : -10.0f);
+                AddReward(beginnerShaping ? -6.0f : -8.0f);
                 EndEpisode();
                 return;
             }

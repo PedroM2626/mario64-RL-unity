@@ -59,30 +59,30 @@ environment_parameters:
           measure: reward
           behavior: MarioParkour
           signal_smoothing: true
-          min_lesson_length: 120
-          threshold: 25.0
+          min_lesson_length: 140
+          threshold: 18.0
         value: 1.0
       - name: Lesson2_Harder
         completion_criteria:
           measure: reward
           behavior: MarioParkour
           signal_smoothing: true
-          min_lesson_length: 140
-          threshold: 40.0
+          min_lesson_length: 160
+          threshold: 30.0
         value: 2.0
       - name: Lesson3_HarderPlus
         completion_criteria:
           measure: reward
           behavior: MarioParkour
           signal_smoothing: true
-          min_lesson_length: 160
-          threshold: 60.0
+          min_lesson_length: 180
+          threshold: 50.0
         value: 3.0
       - name: Lesson4_Hardest
         completion_criteria:
           measure: reward
           behavior: MarioParkour
           signal_smoothing: true
-          min_lesson_length: 180
-          threshold: 80.0
+          min_lesson_length: 200
+          threshold: 70.0
         value: 4.0
