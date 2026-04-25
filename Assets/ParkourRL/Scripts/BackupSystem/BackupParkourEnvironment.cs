@@ -1,15 +1,26 @@
 using UnityEngine;
 using System.Collections.Generic;
 using LibSM64;
+using ParkourRL.HybridSystem;
 
 namespace ParkourRL.BackupSystem
 {
     public class BackupParkourEnvironment : MonoBehaviour
     {
+        public enum StartupMode
+        {
+            Training,
+            Recording
+        }
+
         [Header("Mario Setup")]
         [SerializeField] private GameObject marioPrefab;
         [SerializeField] private Transform marioSpawnPoint;
         [SerializeField] private Material marioMaterial;
+
+        [Header("Mode")]
+        [Tooltip("Modo inicial selecionado no Inspector antes de iniciar a cena")]
+        [SerializeField] private StartupMode startupMode = StartupMode.Training;
 
         [Header("Level Elements")]
         [SerializeField] private Transform goal;
@@ -23,8 +34,15 @@ namespace ParkourRL.BackupSystem
         [SerializeField] private int parallelEnvironments = 4;
         [SerializeField] private float environmentSpacing = 30f;
 
+        // Properties públicas para acesso da inner class RecordingInputProvider
+        public Transform marioSpawnPointPublic => marioSpawnPoint;
+        public Transform goalPublic => goal;
+
         private Vector3 currentSpawnPoint;
         private GameObject currentMario;
+        private GameObject playerControlledMario;
+        private Camera playerFollowCamera;
+        private HybridDataRecorder dataRecorder;
         private readonly List<ParallelEnvInstance> parallelInstances = new List<ParallelEnvInstance>();
 
         private class ParallelEnvInstance
@@ -52,13 +70,31 @@ namespace ParkourRL.BackupSystem
         {
             EnsureAllMeshColliders();
 
-            if (parallelEnvironments > 1 && transform.parent == null)
+            // Inicializar o sistema de gravação para modo Recording
+            if (startupMode == StartupMode.Recording)
+            {
+                dataRecorder = gameObject.AddComponent<HybridDataRecorder>();
+                Debug.Log("[BackupEnv] HybridDataRecorder inicializado para modo Recording");
+            }
+
+            if (startupMode == StartupMode.Training && parallelEnvironments > 1 && transform.parent == null)
             {
                 SpawnParallelEnvironments();
             }
 
             SM64Context.RefreshStaticTerrain();
-            Invoke(nameof(SpawnMario), 0.5f);
+            Invoke(nameof(SpawnInitialMario), 0.5f);
+        }
+
+        private void SpawnInitialMario()
+        {
+            if (startupMode == StartupMode.Recording)
+            {
+                SpawnPlayerControlledMario();
+                return;
+            }
+
+            SpawnMario();
         }
 
         private void EnsureAllMeshColliders()
@@ -122,6 +158,7 @@ namespace ParkourRL.BackupSystem
 
                 BackupParkourEnvironment envScript = envControllerObj.AddComponent<BackupParkourEnvironment>();
                 envScript.parallelEnvironments = 0;
+                envScript.startupMode = this.startupMode;
                 envScript.marioSpawnPoint = spawnClone.transform;
                 envScript.goal = goalClone != null ? goalClone.transform : null;
                 envScript.marioPrefab = this.marioPrefab;
@@ -142,7 +179,14 @@ namespace ParkourRL.BackupSystem
             ResetCheckpoints();
             if (!justSpawned)
             {
-                RespawnMario();
+                if (startupMode == StartupMode.Recording)
+                {
+                    RespawnPlayerControlledMario();
+                }
+                else
+                {
+                    RespawnMario();
+                }
             }
             justSpawned = false;
         }
@@ -204,6 +248,66 @@ namespace ParkourRL.BackupSystem
             justSpawned = true;
         }
 
+        private void SpawnPlayerControlledMario()
+        {
+            Vector3 spawnPos = currentSpawnPoint + Vector3.up * 1f;
+
+            if (playerControlledMario != null)
+            {
+                Destroy(playerControlledMario);
+            }
+
+            playerControlledMario = new GameObject("BackupMarioPlayer");
+            playerControlledMario.SetActive(false);
+            playerControlledMario.transform.position = spawnPos;
+
+            var inputProvider = playerControlledMario.AddComponent<RecordingInputProvider>();
+            inputProvider.SetEnvironment(this);
+            inputProvider.SetRecorder(dataRecorder);
+            if (Camera.main != null)
+            {
+                inputProvider.cameraTransform = Camera.main.transform;
+            }
+
+            SM64Mario sm64Mario = playerControlledMario.AddComponent<SM64Mario>();
+            if (marioMaterial != null)
+            {
+                var materialField = typeof(SM64Mario).GetField("material", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (materialField != null)
+                    materialField.SetValue(sm64Mario, marioMaterial);
+            }
+
+            playerControlledMario.SetActive(true);
+            justSpawned = true;
+
+            // Iniciar gravação se dataRecorder foi criado
+            if (dataRecorder != null)
+            {
+                dataRecorder.StartEpisode();
+                Debug.Log("[BackupEnv] Episódio de gravação iniciado");
+            }
+
+            SetupFollowCamera();
+            Debug.Log("[BackupEnv] Recording mode ativo. Mario controlavel spawnado (WASD/Setas + Espaco).");
+        }
+
+        private void SetupFollowCamera()
+        {
+            if (playerControlledMario == null)
+                return;
+
+            if (playerFollowCamera == null)
+            {
+                var camObj = new GameObject("RecordingPlayerCamera");
+                playerFollowCamera = camObj.AddComponent<Camera>();
+                playerFollowCamera.tag = "Untagged";
+            }
+
+            Vector3 targetPos = playerControlledMario.transform.position + new Vector3(0f, 5f, -8f);
+            playerFollowCamera.transform.position = targetPos;
+            playerFollowCamera.transform.LookAt(playerControlledMario.transform.position + Vector3.up);
+        }
+
         private void RespawnMario()
         {
             if (currentMario != null)
@@ -224,6 +328,290 @@ namespace ParkourRL.BackupSystem
             {
                 currentSpawnPoint = marioSpawnPoint != null ? marioSpawnPoint.position : Vector3.zero;
                 SpawnMario();
+            }
+        }
+
+        private void RespawnPlayerControlledMario()
+        {
+            currentSpawnPoint = marioSpawnPoint != null ? marioSpawnPoint.position : Vector3.zero;
+
+            if (playerControlledMario == null)
+            {
+                SpawnPlayerControlledMario();
+                return;
+            }
+
+            SM64Mario sm64Mario = playerControlledMario.GetComponent<SM64Mario>();
+            Vector3 spawnPos = currentSpawnPoint + Vector3.up * 1f;
+            if (sm64Mario != null)
+            {
+                sm64Mario.Teleport(spawnPos);
+            }
+            else
+            {
+                playerControlledMario.transform.position = spawnPos;
+            }
+
+            SetupFollowCamera();
+        }
+
+        public void SetStartupMode(StartupMode mode)
+        {
+            startupMode = mode;
+        }
+
+        /// <summary>
+        /// Coleta o vetor de observação de 30 dimensões para Recording mode.
+        /// Mantém a mesma estrutura que BackupMarioRLAgent.CollectObservations()
+        /// </summary>
+        public float[] CollectObservationVector()
+        {
+            if (playerControlledMario == null)
+                return new float[30];
+
+            List<float> obs = new List<float>();
+            Vector3 position = playerControlledMario.transform.position;
+            Vector3 previousPosition = position;
+            RaycastHit[] raycastHitsCache = new RaycastHit[1];
+            int raycastCount = 8;
+            float raycastDistance = 10f;
+
+            // 0-2: Position (normalized)
+            obs.Add(position.x / 25f);
+            obs.Add(position.y / 10f);
+            obs.Add(position.z / 25f);
+
+            // 3-6: Direction to goal (normalized) or zeros
+            if (goal != null)
+            {
+                Vector3 toGoal = goal.position - position;
+                obs.Add(toGoal.x / 25f);
+                obs.Add(toGoal.y / 10f);
+                obs.Add(toGoal.z / 25f);
+                obs.Add(toGoal.magnitude / 30f);
+            }
+            else
+            {
+                obs.Add(0f);
+                obs.Add(0f);
+                obs.Add(0f);
+                obs.Add(0f);
+            }
+
+            // 7-9: Velocity (normalized, estimated from position change)
+            Vector3 velocity = Vector3.zero; // Em modo Recording, mantemos velocity zerado
+            obs.Add(Mathf.Clamp(velocity.x / 10f, -1f, 1f));
+            obs.Add(Mathf.Clamp(velocity.y / 10f, -1f, 1f));
+            obs.Add(Mathf.Clamp(velocity.z / 10f, -1f, 1f));
+
+            // 10: Is grounded (raycast down)
+            bool isGrounded = Physics.RaycastNonAlloc(position + Vector3.up * 0.1f, Vector3.down, raycastHitsCache, 0.5f) > 0;
+            obs.Add(isGrounded ? 0f : 1f);
+
+            // 11-26: 8 raycasts (distance + height difference each)
+            for (int i = 0; i < raycastCount; i++)
+            {
+                float angle = (360f / raycastCount) * i;
+                Vector3 direction = Quaternion.Euler(0, angle, 0) * Vector3.forward;
+
+                if (Physics.RaycastNonAlloc(position + Vector3.up * 0.5f, direction, raycastHitsCache, raycastDistance) > 0)
+                {
+                    obs.Add(raycastHitsCache[0].distance / raycastDistance);
+                    obs.Add(Mathf.Clamp((raycastHitsCache[0].point.y - position.y) / 5f, -1f, 1f));
+                }
+                else
+                {
+                    obs.Add(1f);
+                    obs.Add(0f);
+                }
+            }
+
+            // 27: Downward raycast distance
+            if (Physics.RaycastNonAlloc(position + Vector3.up * 0.5f, Vector3.down, raycastHitsCache, 20f) > 0)
+            {
+                obs.Add(raycastHitsCache[0].distance / 20f);
+            }
+            else
+            {
+                obs.Add(1f);
+            }
+
+            // 28: Jump pressed (0/1) - será preenchido pelo RecordingInputProvider
+            obs.Add(0f);
+
+            // 29: Episode time normalized
+            obs.Add(0f);
+
+            return obs.ToArray();
+        }
+
+        private void LateUpdate()
+        {
+            if (startupMode != StartupMode.Recording || playerControlledMario == null || playerFollowCamera == null)
+                return;
+
+            Vector3 targetPos = playerControlledMario.transform.position + new Vector3(0f, 5f, -8f);
+            playerFollowCamera.transform.position = Vector3.Lerp(playerFollowCamera.transform.position, targetPos, 5f * Time.deltaTime);
+            playerFollowCamera.transform.LookAt(playerControlledMario.transform.position + Vector3.up);
+        }
+
+        public class RecordingInputProvider : SM64InputProvider
+        {
+            public Transform cameraTransform;
+            private BackupParkourEnvironment environment;
+            private HybridDataRecorder recorder;
+
+            // Estado de gravação
+            private float[] previousObservations;
+            private float[] currentObservations;
+            private float cumulativeReward = 0f;
+            private int stepCount = 0;
+            private float episodeStartTime = 0f;
+            private float previousDistance = float.MaxValue;
+            private Vector3 previousPosition = Vector3.zero;
+            private const float MAX_EPISODE_TIME = 30f;
+            private const float FALL_THRESHOLD = 3f;
+
+            public void SetEnvironment(BackupParkourEnvironment env)
+            {
+                environment = env;
+            }
+
+            public void SetRecorder(HybridDataRecorder rec)
+            {
+                recorder = rec;
+                episodeStartTime = Time.time;
+            }
+
+            public override Vector3 GetCameraLookDirection()
+            {
+                if (cameraTransform != null)
+                    return cameraTransform.forward;
+                return Vector3.forward;
+            }
+
+            public override Vector2 GetJoystickAxes()
+            {
+                return new Vector2(Input.GetAxis("Horizontal"), Input.GetAxis("Vertical"));
+            }
+
+            public override bool GetButtonHeld(Button button)
+            {
+                switch (button)
+                {
+                    case Button.Jump: return Input.GetButton("Jump");
+                    case Button.Kick: return Input.GetMouseButton(0);
+                    case Button.Stomp: return Input.GetKey(KeyCode.LeftShift);
+                    default: return false;
+                }
+            }
+
+            void Update()
+            {
+                // Só gravar se temos ambiente e recorder
+                if (environment == null || recorder == null || gameObject == null)
+                    return;
+
+                // Coletar observações atuais
+                currentObservations = environment.CollectObservationVector();
+                
+                if (previousObservations == null)
+                {
+                    previousObservations = new float[30];
+                    System.Array.Copy(currentObservations, previousObservations, 30);
+                    previousPosition = gameObject.transform.position;
+                    return;
+                }
+
+                // Calcular reward baseado em progresso em direção ao objetivo
+                float reward = -0.01f; // Penalty por cada passo
+
+                if (environment.goalPublic != null)
+                {
+                    Vector3 marioPos = gameObject.transform.position;
+                    float currentDistance = Vector3.Distance(marioPos, environment.goalPublic.position);
+                    
+                    if (previousDistance < float.MaxValue)
+                    {
+                        float distanceDelta = previousDistance - currentDistance;
+                        if (distanceDelta > 0.01f)
+                        {
+                            reward += distanceDelta * 1.0f; // Reward para aproximar do objetivo
+                        }
+                    }
+                    
+                    previousDistance = currentDistance;
+                }
+
+                // Verificar falha (caiu muito baixo)
+                Vector3 spawnPos = environment.marioSpawnPointPublic != null ? environment.marioSpawnPointPublic.position : Vector3.zero;
+                if (gameObject.transform.position.y < spawnPos.y - FALL_THRESHOLD)
+                {
+                    reward = -5.0f;
+                    RecordFinalStep(reward, true);
+                    return;
+                }
+
+                // Verificar tempo máximo
+                float elapsedTime = Time.time - episodeStartTime;
+                if (elapsedTime >= MAX_EPISODE_TIME)
+                {
+                    reward = -5.0f;
+                    RecordFinalStep(reward, false);
+                    return;
+                }
+
+                // Gravar step normal
+                if (stepCount % 2 == 0) // Gravar a cada 2 frames para reduzir dados
+                {
+                    float[] actions = new float[3]
+                    {
+                        GetJoystickAxes().x,
+                        GetJoystickAxes().y,
+                        GetButtonHeld(Button.Jump) ? 1f : 0f
+                    };
+
+                    recorder.RecordStep(previousObservations, actions, reward, currentObservations, false);
+                    cumulativeReward += reward;
+                }
+
+                stepCount++;
+                System.Array.Copy(currentObservations, previousObservations, 30);
+                previousPosition = gameObject.transform.position;
+            }
+
+            private void RecordFinalStep(float reward, bool success)
+            {
+                // Gravar último step
+                float[] actions = new float[3]
+                {
+                    GetJoystickAxes().x,
+                    GetJoystickAxes().y,
+                    GetButtonHeld(Button.Jump) ? 1f : 0f
+                };
+
+                recorder.RecordStep(previousObservations, actions, reward, currentObservations, true);
+                cumulativeReward += reward;
+
+                // Salvar episódio
+                Debug.Log($"[RecordingProvider] Episódio terminado. Success={success}, Reward={cumulativeReward:F2}, Steps={stepCount}");
+                
+                // Para salvar, precisamos usar a estrutura esperada pelo SaveEpisode
+                // Por enquanto, chamamos FlushBatch para forçar salvamento dos dados já registrados
+                recorder.FlushBatch();
+
+                // Reset para próximo episódio
+                cumulativeReward = 0f;
+                stepCount = 0;
+                episodeStartTime = Time.time;
+                previousObservations = null;
+                
+                // Respawn Mario
+                if (environment != null)
+                {
+                    environment.ResetEnvironment();
+                    recorder.StartEpisode();
+                }
             }
         }
     }
