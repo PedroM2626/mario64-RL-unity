@@ -17,8 +17,6 @@ namespace ParkourRL.BackupSystem
         [SerializeField] private List<Transform> platformSpawnPoints = new List<Transform>();
 
         [Header("Randomization")]
-        [SerializeField] private bool randomizePlatforms = false;
-        [SerializeField] private float platformRandomizationRange = 0.5f;
         [SerializeField] private List<GameObject> platformPrefabs = new List<GameObject>();
 
         [Header("Multi-Agent Parallel Training")]

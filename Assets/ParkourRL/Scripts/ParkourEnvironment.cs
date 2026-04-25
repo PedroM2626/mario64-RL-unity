@@ -50,10 +50,6 @@ namespace ParkourRL
         [SerializeField] private int randomizationMaxesAtLesson = 4;
 
         [Header("Advanced Phases (5-8)")]
-        [Tooltip("A partir desta licao, começa a usar full map ao invés de platforms individuais.")]
-        [SerializeField] private int fullMapStartsAtLesson = 7;
-        [Tooltip("A partir desta licao, spawn/goal variam aleatoriamente (+/- metros).")]
-        [SerializeField] private int fullMapRandomSpawnStartsAtLesson = 8;
         [Tooltip("Variação máxima de spawn/goal em metros para fases 8+.")]
         [SerializeField] private float fullMapSpawnVariationRange = 1.0f;
 
@@ -537,8 +533,13 @@ namespace ParkourRL
 
         private void UpdateSpawnSelectionFromCurriculum()
         {
+            // Com win-rate cycle, o spawn point eh controlado pelo ReportEpisodeResult (avanço de lição)
+            // Mas ainda aplicamos o clamping para garantir que nao saia dos limites
             if (useWinRateCycle)
+            {
+                selectedSpawnPointIndex = Mathf.Clamp(selectedSpawnPointIndex, 0, spawnPoints.Count - 1);
                 return;
+            }
 
             if (!useCurriculumLessonForSpawn || spawnPoints == null || spawnPoints.Count == 0)
                 return;
@@ -591,13 +592,24 @@ namespace ParkourRL
             float winRate = (float)wins / targetWindow;
             if (winRate >= winRateThreshold)
             {
-                randomModeEnabled = !randomModeEnabled;
+                // Avanca para o proximo spawn point (proxima lição)
+                int oldSpawnIndex = selectedSpawnPointIndex;
+                selectedSpawnPointIndex = Mathf.Min(selectedSpawnPointIndex + 1, spawnPoints.Count - 1);
                 recentEpisodeResults.Clear();
-                Debug.Log($"[ParkourEnv] Win-rate {winRate:P0} atingiu meta ({winRateThreshold:P0}). Alternando modo para {(randomModeEnabled ? "RANDOM" : "FIXO")}.");
+
+                if (selectedSpawnPointIndex != oldSpawnIndex)
+                {
+                    Debug.Log($"[ParkourEnv] Win-rate {winRate:P0} atingiu meta ({winRateThreshold:P0}). Avançando: spawnPoints[{oldSpawnIndex}] -> spawnPoints[{selectedSpawnPointIndex}]");
+                }
+                else
+                {
+                    Debug.Log($"[ParkourEnv] Win-rate {winRate:P0} atingiu meta ({winRateThreshold:P0}). Já está no spawn final [spawnPoints[{selectedSpawnPointIndex}]]. Alternando modo random.");
+                    randomModeEnabled = !randomModeEnabled;
+                }
             }
             else
             {
-                Debug.Log($"[ParkourEnv] Win-rate atual: {winRate:P0} ({wins}/{targetWindow}) | Modo: {(randomModeEnabled ? "RANDOM" : "FIXO")}");
+                Debug.Log($"[ParkourEnv] Win-rate atual: {winRate:P0} ({wins}/{targetWindow}) | Spawn: [{selectedSpawnPointIndex}]");
             }
         }
 

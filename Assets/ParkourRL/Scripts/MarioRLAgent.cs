@@ -3,6 +3,8 @@ using LibSM64;
 using Unity.MLAgents;
 using Unity.MLAgents.Sensors;
 using Unity.MLAgents.Actuators;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace ParkourRL
 {
@@ -15,32 +17,18 @@ namespace ParkourRL
         [Header("Environment")]
         [SerializeField] private ParkourEnvironment environment;
         [SerializeField] private Transform targetGoal;
+        
+        [Header("Plataformas Dinâmicas")]
+        [Tooltip("Detectar plataformas SM64StaticTerrain automaticamente")]
+        [SerializeField] private bool autoDetectPlatforms = true;
+        [Tooltip("Recompensa por alcançar cada plataforma")]
+        [SerializeField] private float platformReward = 15f;
+        [Tooltip("Raio de tolerância para considerar que chegou na plataforma (usa o maior: este valor ou metade do tamanho da plataforma)")]
+        [SerializeField] private float platformReachRadius = 3f;
 
         [Header("Observations")]
         [SerializeField] private int raycastCount = 8;
         [SerializeField] private float raycastDistance = 10f;
-
-        [Header("Curriculum / Reward Shaping")]
-        [Tooltip("Licao a partir da qual a penalidade por velocidade fica mais agressiva.")]
-        [SerializeField] private int aggressiveShapingStartsAtLesson = 2;
-        [Tooltip("Penalidade base por passo nas primeiras licoes.")]
-        [SerializeField] private float earlyLessonExistentialPenalty = -0.01f;
-        [Tooltip("Penalidade base por passo nas licoes mais avancadas.")]
-        [SerializeField] private float lateLessonExistentialPenalty = -0.02f;
-        [Tooltip("Bonus por progresso em direcao ao goal nas primeiras licoes.")]
-        [SerializeField] private float earlyLessonProgressReward = 0.12f;
-        [Tooltip("Bonus por progresso em direcao ao goal nas licoes avancadas.")]
-        [SerializeField] private float lateLessonProgressReward = 0.10f;
-        [Tooltip("Bonus por progresso nas fases 5-8 (repeticao com randomizacao progressiva e full map).")]
-        [SerializeField] private float advancedPhaseProgressReward = 0.15f;
-        [Tooltip("Penalidade por andar para tras nas primeiras licoes.")]
-        [SerializeField] private float earlyLessonBackwardPenalty = 0.01f;
-        [Tooltip("Penalidade por andar para tras nas licoes avancadas.")]
-        [SerializeField] private float lateLessonBackwardPenalty = 0.01f;
-        [Tooltip("Recompensa por concluir full map (fases 7+).")]
-        [SerializeField] private float fullMapCompletionBonus = 50.0f;
-        [Tooltip("Pequeno bonus por tentar saltar e ganhar altura, para evitar congelamento nas plataformas.")]
-        [SerializeField] private float jumpAttemptReward = 0.05f;
 
         [HideInInspector] public Vector2 joystickInput;
         [HideInInspector] public bool jumpPressed;
@@ -55,8 +43,12 @@ namespace ParkourRL
         private float episodeTime;
         private float bestDistanceToGoal;
         private float bestDistanceWhileGrounded; // Rastreia o progresso SEGURO (quando ele pousa em uma plataforma)
-        private float bestCompletionTime; // Melhor tempo de conclusao entre episodios
         private bool episodeResultReported;
+        
+        private int currentPlatformIndex = 0; // Próxima plataforma que o Mario deve alcançar
+        private bool[] platformsReached;
+        private Collider[] detectedPlatforms; // Colliders das plataformas detectadas
+        private Vector3[] platformCenters; // Centros calculados das plataformas
 
         private const float MAX_EPISODE_TIME = 30f; // Estilo old: mais episodios por hora para convergir mais rapido
         
@@ -76,8 +68,6 @@ namespace ParkourRL
         {
             if (marioComponent == null)
                 marioComponent = GetComponent<SM64Mario>();
-
-            bestCompletionTime = MAX_EPISODE_TIME; // Inicializa com o pior tempo possivel
         }
 
         public override void Initialize()
@@ -115,6 +105,14 @@ namespace ParkourRL
             previousPosition = transform.position;
             episodeTime = 0f;
             episodeResultReported = false;
+            
+            // Detectar e resetar plataformas
+            DetectPlatforms();
+            currentPlatformIndex = 0;
+            if (detectedPlatforms != null && detectedPlatforms.Length > 0)
+            {
+                platformsReached = new bool[detectedPlatforms.Length];
+            }
 
         }
 
@@ -272,6 +270,128 @@ namespace ParkourRL
                 Debug.Log($"[Mario] Step {StepCount}: Dist={currentDistance:F1}, Best={bestDistanceToGoal:F1}, " +
                           $"Reward={GetCumulativeReward():F2}, Pos={currentPos}, Y={currentPos.y:F2}");
             }
+
+            // Verificacao de plataformas - recompensa por seguir o caminho correto
+            CheckPlatforms();
+
+            // Verificacao imediata de proximidade do goal - usa area aproximada
+            if (IsInGoalArea() && !episodeResultReported)
+            {
+                AddReward(50f);
+                ReportEpisodeResult(true);
+                EndEpisode();
+            }
+        }
+
+        /// <summary>
+        /// Detecta todas as plataformas SM64StaticTerrain na cena e ordena por distancia do spawn
+        /// </summary>
+        private void DetectPlatforms()
+        {
+            if (!autoDetectPlatforms)
+                return;
+
+            // Encontrar todos os objetos com SM64StaticTerrain (excluindo o chao de morte)
+            LibSM64.SM64StaticTerrain[] terrains = FindObjectsOfType<LibSM64.SM64StaticTerrain>();
+            List<Collider> platformColliders = new List<Collider>();
+            List<Vector3> centers = new List<Vector3>();
+
+            foreach (var terrain in terrains)
+            {
+                // Pular o chao de morte (DeathFloor) e chao muito abaixo
+                if (terrain.gameObject.name.ToLower().Contains("death") || 
+                    terrain.transform.position.y < -15f)
+                    continue;
+
+                Collider col = terrain.GetComponent<Collider>();
+                if (col != null)
+                {
+                    platformColliders.Add(col);
+                    centers.Add(col.bounds.center);
+                }
+            }
+
+            // Ordenar por distancia do spawn (do mais proximo ao mais distante)
+            Vector3 spawnPos = startPosition;
+            var sortedIndices = Enumerable.Range(0, platformColliders.Count)
+                .OrderBy(i => Vector3.Distance(spawnPos, centers[i]))
+                .ToList();
+
+            detectedPlatforms = sortedIndices.Select(i => platformColliders[i]).ToArray();
+            platformCenters = sortedIndices.Select(i => centers[i]).ToArray();
+
+            if (detectedPlatforms.Length > 0)
+            {
+                Debug.Log($"[Mario] {detectedPlatforms.Length} plataformas detectadas e ordenadas");
+                for (int i = 0; i < detectedPlatforms.Length; i++)
+                {
+                    Debug.Log($"  Plataforma {i}: {detectedPlatforms[i].name} em {platformCenters[i]}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Verifica se Mario está na área da proxima plataforma (usa bounds da plataforma + tolerancia)
+        /// </summary>
+        private void CheckPlatforms()
+        {
+            if (detectedPlatforms == null || detectedPlatforms.Length == 0)
+                return;
+            if (currentPlatformIndex >= detectedPlatforms.Length)
+                return;
+
+            Collider targetPlatform = detectedPlatforms[currentPlatformIndex];
+            if (targetPlatform == null)
+                return;
+
+            // Calcular raio de alcance baseado no tamanho da plataforma
+            Bounds bounds = targetPlatform.bounds;
+            float platformRadius = Mathf.Max(bounds.extents.x, bounds.extents.z) * 0.8f;
+            float reachRadius = Mathf.Max(platformReachRadius, platformRadius);
+
+            // Distancia horizontal até o centro da plataforma
+            float horizontalDist = Vector3.Distance(
+                new Vector3(transform.position.x, 0, transform.position.z),
+                new Vector3(platformCenters[currentPlatformIndex].x, 0, platformCenters[currentPlatformIndex].z)
+            );
+
+            // Verificar se está acima da plataforma (altura)
+            bool isAbovePlatform = transform.position.y >= (bounds.min.y - 0.5f) && 
+                                   transform.position.y <= (bounds.max.y + 5f);
+
+            // Check se está dentro da área da plataforma
+            if (horizontalDist < reachRadius && isAbovePlatform && !platformsReached[currentPlatformIndex])
+            {
+                platformsReached[currentPlatformIndex] = true;
+                AddReward(platformReward);
+                Debug.Log($"[Mario] Plataforma {currentPlatformIndex} ({targetPlatform.name}) alcançada! " +
+                          $"+{platformReward} reward | Dist: {horizontalDist:F1}m, Raio: {reachRadius:F1}m");
+                currentPlatformIndex++;
+            }
+        }
+
+        /// <summary>
+        /// Verifica se Mario está na área do goal (não coordenada exata)
+        /// </summary>
+        private bool IsInGoalArea()
+        {
+            if (targetGoal == null)
+                return false;
+
+            // Tentar pegar o Collider do goal para usar bounds
+            Collider goalCollider = targetGoal.GetComponent<Collider>();
+            if (goalCollider != null && goalCollider.isTrigger)
+            {
+                // Se tiver trigger, verifica se está dentro do bounds
+                return goalCollider.bounds.Contains(transform.position);
+            }
+
+            // Fallback: usar distancia com raio maior (area aproximada)
+            float dist = Vector3.Distance(
+                new Vector3(transform.position.x, 0, transform.position.z),
+                new Vector3(targetGoal.position.x, 0, targetGoal.position.z)
+            );
+            return dist < 5f; // Raio de 5 metros para o goal
         }
 
         public override void Heuristic(in ActionBuffers actionsOut)
@@ -316,7 +436,18 @@ namespace ParkourRL
 
         void OnTriggerEnter(Collider other)
         {
-            if (other.CompareTag("Goal"))
+            if (other.CompareTag("Goal") && !episodeResultReported)
+            {
+                AddReward(50f);
+                ReportEpisodeResult(true);
+                EndEpisode();
+            }
+        }
+
+        void OnTriggerStay(Collider other)
+        {
+            // Backup: se o agente ficar dentro do goal mas OnTriggerEnter nao disparar
+            if (other.CompareTag("Goal") && !episodeResultReported)
             {
                 AddReward(50f);
                 ReportEpisodeResult(true);
