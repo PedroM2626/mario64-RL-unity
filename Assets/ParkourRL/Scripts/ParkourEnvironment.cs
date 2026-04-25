@@ -76,8 +76,6 @@ namespace ParkourRL
         private GameObject currentMario;
         private Vector3 originalGoalPosition;
         private bool warnedMissingSpawnPoints = false;
-        private int lastLoggedCurriculumLesson = int.MinValue;
-        private int lastLoggedSpawnIndex = int.MinValue;
         private Vector3 envSpawnOffset = Vector3.zero;
         private Vector3 envGoalOffset = Vector3.zero;
         private bool envOffsetsInitialized = false;
@@ -541,29 +539,18 @@ namespace ParkourRL
                 return;
             }
 
-            if (!useCurriculumLessonForSpawn || spawnPoints == null || spawnPoints.Count == 0)
-                return;
-
-            var academy = Unity.MLAgents.Academy.Instance;
-            if (academy == null)
-                return;
-
-            float lessonValue = academy.EnvironmentParameters.GetWithDefault(curriculumLessonParameter, -1f);
-            if (lessonValue < 0f)
-                return;
-
-            int lesson = Mathf.Max(0, Mathf.RoundToInt(lessonValue));
-            int mappedIndex = lessonZeroUsesFirstSpawnPoint
-                ? lesson
-                : (spawnPoints.Count - 1 - lesson);
-
-            selectedSpawnPointIndex = Mathf.Clamp(mappedIndex, 0, spawnPoints.Count - 1);
-
-            if (lesson != lastLoggedCurriculumLesson || selectedSpawnPointIndex != lastLoggedSpawnIndex)
+            // MODO CURRICULUM SIMPLIFICADO: Sempre usar o ULTIMO spawn point (mapa todo desbloqueado)
+            // Isso faz o agente treinar direto no percurso completo
+            if (useCurriculumLessonForSpawn && spawnPoints != null && spawnPoints.Count > 0)
             {
-                Debug.Log($"[ParkourEnv] Curriculum '{curriculumLessonParameter}'={lesson} => spawnPoints[{selectedSpawnPointIndex}]");
-                lastLoggedCurriculumLesson = lesson;
-                lastLoggedSpawnIndex = selectedSpawnPointIndex;
+                // Ir direto para o ultimo spawn point (percurso mais longo/dificil)
+                int lastIndex = spawnPoints.Count - 1;
+                if (selectedSpawnPointIndex != lastIndex)
+                {
+                    selectedSpawnPointIndex = lastIndex;
+                    Debug.Log($"[ParkourEnv] Curriculum Mode: Usando ultimo spawn point [{selectedSpawnPointIndex}] - Mapa todo desbloqueado");
+                }
+                return;
             }
         }
 
