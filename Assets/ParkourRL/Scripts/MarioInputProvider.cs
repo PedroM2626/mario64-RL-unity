@@ -133,9 +133,18 @@ namespace ParkourRL
             {
                 switch (button)
                 {
-                    case Button.Jump: return teamBattleAgent.jumpPressed;
-                    case Button.Kick: return teamBattleAgent.kickPressed;
-                    case Button.Stomp: return teamBattleAgent.stompPressed;
+                    case Button.Jump:
+                        bool jp = teamBattleAgent.jumpPressed;
+                        if (jp) teamBattleAgent.jumpPressed = false;
+                        return jp;
+                    case Button.Kick:
+                        bool kp = teamBattleAgent.kickPressed;
+                        if (kp) teamBattleAgent.kickPressed = false;
+                        return kp;
+                    case Button.Stomp:
+                        bool sp = teamBattleAgent.stompPressed;
+                        if (sp) teamBattleAgent.stompPressed = false;
+                        return sp;
                     default: return false;
                 }
             }

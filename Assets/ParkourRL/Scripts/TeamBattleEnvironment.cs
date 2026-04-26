@@ -240,12 +240,17 @@ namespace ParkourRL
         /// </summary>
         private void ProcessCombatCollisions()
         {
+            // Criar copias das listas para evitar InvalidOperationException
+            // caso DealDamage -> EliminateAgent remova um agente da lista original
+            List<TeamBattleAgent> teamA = new List<TeamBattleAgent>(agentsByTeam[0]);
+            List<TeamBattleAgent> teamB = new List<TeamBattleAgent>(agentsByTeam[1]);
+
             // Team A atacando Team B
-            foreach (var attacker in agentsByTeam[0])
+            foreach (var attacker in teamA)
             {
                 if (attacker == null || !attacker.isActiveAndEnabled) continue;
 
-                foreach (var defender in agentsByTeam[1])
+                foreach (var defender in teamB)
                 {
                     if (defender == null || !defender.isActiveAndEnabled) continue;
 
@@ -268,11 +273,11 @@ namespace ParkourRL
             }
 
             // Team B atacando Team A
-            foreach (var attacker in agentsByTeam[1])
+            foreach (var attacker in teamB)
             {
                 if (attacker == null || !attacker.isActiveAndEnabled) continue;
 
-                foreach (var defender in agentsByTeam[0])
+                foreach (var defender in teamA)
                 {
                     if (defender == null || !defender.isActiveAndEnabled) continue;
 
