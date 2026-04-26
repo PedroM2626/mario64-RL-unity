@@ -367,7 +367,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1234567894}
   m_Layer: 0
-  m_Name: TeamASpawns
+  m_Name: PursuerSpawns
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -403,7 +403,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1234567896}
   m_Layer: 0
-  m_Name: Spawn_A_0
+  m_Name: PursuerSpawnPoint
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -434,12 +434,12 @@ GameObject:
   m_Component:
   - component: {fileID: 1234567898}
   m_Layer: 0
-  m_Name: Spawn_A_1
+  m_Name: Unused_PursuerSpawn_1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1234567898
 Transform:
   m_ObjectHideFlags: 0
@@ -465,12 +465,12 @@ GameObject:
   m_Component:
   - component: {fileID: 1234567900}
   m_Layer: 0
-  m_Name: Spawn_A_2
+  m_Name: Unused_PursuerSpawn_2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1234567900
 Transform:
   m_ObjectHideFlags: 0
@@ -496,12 +496,12 @@ GameObject:
   m_Component:
   - component: {fileID: 1234567902}
   m_Layer: 0
-  m_Name: Spawn_A_3
+  m_Name: Unused_PursuerSpawn_3
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1234567902
 Transform:
   m_ObjectHideFlags: 0
@@ -527,12 +527,12 @@ GameObject:
   m_Component:
   - component: {fileID: 1234567904}
   m_Layer: 0
-  m_Name: Spawn_A_4
+  m_Name: Unused_PursuerSpawn_4
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1234567904
 Transform:
   m_ObjectHideFlags: 0
@@ -558,7 +558,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1234567906}
   m_Layer: 0
-  m_Name: TeamBSpawns
+  m_Name: FugitiveSpawns
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -594,7 +594,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1234567908}
   m_Layer: 0
-  m_Name: Spawn_B_0
+  m_Name: FugitiveSpawnPoint
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -625,12 +625,12 @@ GameObject:
   m_Component:
   - component: {fileID: 1234567910}
   m_Layer: 0
-  m_Name: Spawn_B_1
+  m_Name: Unused_FugitiveSpawn_1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1234567910
 Transform:
   m_ObjectHideFlags: 0
@@ -656,12 +656,12 @@ GameObject:
   m_Component:
   - component: {fileID: 1234567912}
   m_Layer: 0
-  m_Name: Spawn_B_2
+  m_Name: Unused_FugitiveSpawn_2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1234567912
 Transform:
   m_ObjectHideFlags: 0
@@ -687,12 +687,12 @@ GameObject:
   m_Component:
   - component: {fileID: 1234567914}
   m_Layer: 0
-  m_Name: Spawn_B_3
+  m_Name: Unused_FugitiveSpawn_3
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1234567914
 Transform:
   m_ObjectHideFlags: 0
@@ -718,12 +718,12 @@ GameObject:
   m_Component:
   - component: {fileID: 1234567916}
   m_Layer: 0
-  m_Name: Spawn_B_4
+  m_Name: Unused_FugitiveSpawn_4
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1234567916
 Transform:
   m_ObjectHideFlags: 0
@@ -781,7 +781,7 @@ GameObject:
   - component: {fileID: 1234567920}
   - component: {fileID: 1234567921}
   m_Layer: 0
-  m_Name: TeamBattleManager
+  m_Name: ChaseTrainingManager
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -811,39 +811,22 @@ MonoBehaviour:
   m_GameObject: {fileID: 1234567919}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d177afde1aad4f644903e0bd591cad12, type: 3}
+  m_Script: {fileID: 11500000, guid: 41d7a84327ce4df2a1c558a67ef2f74a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   marioPrefab: {fileID: 2518639426973004745, guid: 8772da6d9ed00381fb7365a5f1b52114,
     type: 3}
   baseMarioMaterial: {fileID: 2100000, guid: db0929541b7d4e749826b59a52ac58e3, type: 2}
-  teamAMaterial: {fileID: 0}
-  teamBMaterial: {fileID: 0}
-  useWarmStartModel: 0
-  warmStartModel: {fileID: 0}
-  warmStartModelAssetPath: 
-  teamASpawnPoints:
-  - {fileID: 1234567896}
-  - {fileID: 1234567898}
-  - {fileID: 1234567900}
-  - {fileID: 1234567902}
-  - {fileID: 1234567904}
-  teamBSpawnPoints:
-  - {fileID: 1234567908}
-  - {fileID: 1234567910}
-  - {fileID: 1234567912}
-  - {fileID: 1234567914}
-  - {fileID: 1234567916}
+  pursuerMaterial: {fileID: 0}
+  fugitiveMaterial: {fileID: 0}
+  pursuerSpawnPoint: {fileID: 1234567896}
+  fugitiveSpawnPoint: {fileID: 1234567908}
   arenaCenter: {fileID: 1234567918}
   arenaRadius: 18
-  marioPerTeam: 5
-  maxBattleTime: 120
-  marioHealth: 100
-  kickDamage: 20
-  stompDamage: 15
-  knockbackForce: 5
-  teamAColor: {r: 1, g: 0, b: 0, a: 1}
-  teamBColor: {r: 0, g: 0.7, b: 1, a: 1}
+  maxBattleTime: 90
+  catchDistance: 2
+  pursuerColor: {r: 1, g: 0, b: 0, a: 1}
+  fugitiveColor: {r: 0, g: 0.7, b: 1, a: 1}
 --- !u!33 &1234567922
 MeshFilter:
   m_ObjectHideFlags: 0

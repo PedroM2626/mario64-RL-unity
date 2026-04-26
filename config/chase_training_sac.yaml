@@ -1,0 +1,41 @@
+default_settings:
+  trainer_type: sac
+  hyperparameters:
+    batch_size: 256
+    buffer_size: 500000
+    learning_rate: 0.0003
+    init_entcoef: 0.2
+    tau: 0.005
+    steps_per_update: 1
+    save_replay_buffer: false
+    learning_rate_schedule: constant
+  network_settings:
+    normalize: true
+    hidden_units: 256
+    num_layers: 2
+  reward_signals:
+    extrinsic:
+      gamma: 0.99
+      strength: 1.0
+  max_steps: 5000000
+  time_horizon: 128
+  summary_freq: 10000
+  threaded: true
+
+behaviors:
+  My Behavior:
+    trainer_type: sac
+
+  ChasePursuer:
+    trainer_type: sac
+
+  ChaseFugitive:
+    trainer_type: sac
+
+engine_settings:
+  width: 1280
+  height: 720
+  quality_level: 2
+  time_scale: 6.0
+  target_frame_rate: -1
+  no_graphics: false

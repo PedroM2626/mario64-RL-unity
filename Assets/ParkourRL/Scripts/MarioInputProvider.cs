@@ -10,6 +10,7 @@ namespace ParkourRL
         private MarioRLAgent agent;
         private MarioCompetitiveAgent competitiveAgent;
         private TeamBattleAgent teamBattleAgent;
+        private ChaseAgent chaseAgent;
         private Component backupAgent;
         private Type backupAgentType;
 
@@ -26,6 +27,8 @@ namespace ParkourRL
                 competitiveAgent = GetComponent<MarioCompetitiveAgent>();
             if (teamBattleAgent == null)
                 teamBattleAgent = GetComponent<TeamBattleAgent>();
+            if (chaseAgent == null)
+                chaseAgent = GetComponent<ChaseAgent>();
             if (backupAgent == null)
             {
                 if (backupAgentType == null)
@@ -84,6 +87,8 @@ namespace ParkourRL
                 return competitiveAgent.cameraLookDirection.normalized;
             if (teamBattleAgent != null)
                 return teamBattleAgent.cameraLookDirection.normalized;
+            if (chaseAgent != null)
+                return chaseAgent.cameraLookDirection.normalized;
             if (backupAgent != null)
                 return ReadBackupVector3("cameraLookDirection").normalized;
             return Vector3.forward;
@@ -98,6 +103,8 @@ namespace ParkourRL
                 return competitiveAgent.joystickInput;
             if (teamBattleAgent != null)
                 return teamBattleAgent.joystickInput;
+            if (chaseAgent != null)
+                return chaseAgent.joystickInput;
             if (backupAgent != null)
                 return ReadBackupVector2("joystickInput");
             return Vector2.zero;
@@ -144,6 +151,26 @@ namespace ParkourRL
                     case Button.Stomp:
                         bool sp = teamBattleAgent.stompPressed;
                         if (sp) teamBattleAgent.stompPressed = false;
+                        return sp;
+                    default: return false;
+                }
+            }
+
+            if (chaseAgent != null)
+            {
+                switch (button)
+                {
+                    case Button.Jump:
+                        bool jp = chaseAgent.jumpPressed;
+                        if (jp) chaseAgent.jumpPressed = false;
+                        return jp;
+                    case Button.Kick:
+                        bool kp = chaseAgent.kickPressed;
+                        if (kp) chaseAgent.kickPressed = false;
+                        return kp;
+                    case Button.Stomp:
+                        bool sp = chaseAgent.stompPressed;
+                        if (sp) chaseAgent.stompPressed = false;
                         return sp;
                     default: return false;
                 }

@@ -1,0 +1,281 @@
+using UnityEngine;
+using LibSM64;
+using Unity.MLAgents;
+
+namespace ParkourRL
+{
+    /// <summary>
+    /// Ambiente 1v1 de perseguição: um perseguidor precisa atingir o fugitivo
+    /// com golpes (soco/chute/rasteira), enquanto o fugitivo tenta sobreviver.
+    /// Treino descentralizado com duas policies SAC.
+    /// </summary>
+    public class ChaseTrainingEnvironment : MonoBehaviour
+    {
+        private const string PursuerBehaviorName = "ChasePursuer";
+        private const string FugitiveBehaviorName = "ChaseFugitive";
+        private const int VectorObservationSize = 31;
+
+        [Header("Mario Setup")]
+        [SerializeField] private GameObject marioPrefab;
+        [SerializeField] private Material baseMarioMaterial;
+        [SerializeField] private Material pursuerMaterial;
+        [SerializeField] private Material fugitiveMaterial;
+
+        [Header("Arena Setup")]
+        [SerializeField] private Transform pursuerSpawnPoint;
+        [SerializeField] private Transform fugitiveSpawnPoint;
+        [SerializeField] private Transform arenaCenter;
+        [SerializeField] private float arenaRadius = 22f;
+
+        [Header("Chase Settings")]
+        [SerializeField] private float maxBattleTime = 90f;
+        [SerializeField] private float catchDistance = 2f;
+
+        [Header("Visual")]
+        [SerializeField] private Color pursuerColor = Color.red;
+        [SerializeField] private Color fugitiveColor = new Color(0.2f, 0.9f, 1f);
+
+        private ChaseAgent pursuer;
+        private ChaseAgent fugitive;
+        private float battleStartTime;
+        private bool duelActive = true;
+        private bool hasSpawned;
+
+        void Start()
+        {
+            EnsureAllMeshColliders();
+            SM64Context.RefreshStaticTerrain();
+
+            if (!hasSpawned)
+            {
+                hasSpawned = true;
+                Invoke(nameof(SpawnDuelAgents), 0.5f);
+            }
+
+            battleStartTime = Time.time;
+        }
+
+        void FixedUpdate()
+        {
+            if (!duelActive)
+                return;
+
+            if (pursuer == null || fugitive == null || !pursuer.isActiveAndEnabled || !fugitive.isActiveAndEnabled)
+                return;
+
+            ProcessCombatCollision();
+
+            if (Time.time - battleStartTime > maxBattleTime)
+            {
+                ResolveTimeout();
+            }
+        }
+
+        private void EnsureAllMeshColliders()
+        {
+            SM64StaticTerrain[] terrains = FindObjectsOfType<SM64StaticTerrain>();
+            foreach (var terrain in terrains)
+            {
+                if (terrain.GetComponent<MeshCollider>() == null)
+                {
+                    MeshFilter mf = terrain.GetComponent<MeshFilter>();
+                    if (mf != null && mf.sharedMesh != null)
+                    {
+                        MeshCollider mc = terrain.gameObject.AddComponent<MeshCollider>();
+                        mc.sharedMesh = mf.sharedMesh;
+                        mc.convex = false;
+                    }
+                }
+            }
+        }
+
+        private void SpawnDuelAgents()
+        {
+            if (marioPrefab == null)
+            {
+#if UNITY_EDITOR
+                marioPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Mario.prefab");
+#endif
+                if (marioPrefab == null)
+                {
+                    Debug.LogError("[ChaseTraining] Mario prefab nao encontrado.");
+                    return;
+                }
+            }
+
+            Material matBase = ResolveBaseMaterial();
+            Material matPursuer = pursuerMaterial != null ? pursuerMaterial : matBase;
+            Material matFugitive = fugitiveMaterial != null ? fugitiveMaterial : matBase;
+
+            pursuer = SpawnMario("Pursuer", ChaseRole.Pursuer, GetSpawnPosition(pursuerSpawnPoint), pursuerColor, matPursuer, PursuerBehaviorName);
+            fugitive = SpawnMario("Fugitive", ChaseRole.Fugitive, GetSpawnPosition(fugitiveSpawnPoint), fugitiveColor, matFugitive, FugitiveBehaviorName);
+
+            if (pursuer != null && fugitive != null)
+            {
+                pursuer.opponent = fugitive;
+                fugitive.opponent = pursuer;
+                duelActive = true;
+                battleStartTime = Time.time;
+                Debug.Log("[ChaseTraining] Episodio iniciado: Pursuer vs Fugitive.");
+            }
+        }
+
+        private Material ResolveBaseMaterial()
+        {
+            Material matBase = baseMarioMaterial;
+            if (matBase == null && marioPrefab != null)
+            {
+                SM64Mario prefabMario = marioPrefab.GetComponent<SM64Mario>();
+                if (prefabMario != null)
+                {
+                    var matField = typeof(SM64Mario).GetField("material", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    if (matField != null)
+                        matBase = matField.GetValue(prefabMario) as Material;
+                }
+            }
+            return matBase;
+        }
+
+        private ChaseAgent SpawnMario(string label, ChaseRole role, Vector3 spawnPos, Color color, Material baseMat, string behaviorName)
+        {
+            GameObject marioObj = new GameObject($"Mario_{label}");
+            marioObj.SetActive(false);
+            marioObj.transform.position = spawnPos;
+
+            ChaseAgent chaseAgent = marioObj.AddComponent<ChaseAgent>();
+            chaseAgent.role = role;
+            chaseAgent.chaseEnvironment = this;
+
+            marioObj.AddComponent<MarioInputProvider>();
+            SM64Mario sm64Mario = marioObj.AddComponent<SM64Mario>();
+            ApplyMarioMaterial(marioObj, sm64Mario, baseMat, color);
+
+            SphereCollider combatCollider = marioObj.AddComponent<SphereCollider>();
+            combatCollider.radius = 1.5f;
+            combatCollider.isTrigger = true;
+
+            var bp = marioObj.AddComponent<Unity.MLAgents.Policies.BehaviorParameters>();
+            bp.BehaviorName = behaviorName;
+            bp.BehaviorType = Unity.MLAgents.Policies.BehaviorType.Default;
+            bp.BrainParameters.VectorObservationSize = VectorObservationSize;
+            bp.BrainParameters.NumStackedVectorObservations = 1;
+            bp.BrainParameters.ActionSpec = new Unity.MLAgents.Actuators.ActionSpec(5, System.Array.Empty<int>());
+            bp.TeamId = 0;
+
+            var dr = marioObj.AddComponent<Unity.MLAgents.DecisionRequester>();
+            dr.DecisionPeriod = 5;
+            dr.TakeActionsBetweenDecisions = true;
+
+            marioObj.SetActive(true);
+            return chaseAgent;
+        }
+
+        private void ApplyMarioMaterial(GameObject marioObj, SM64Mario sm64Mario, Material matBase, Color color)
+        {
+            if (matBase == null)
+                return;
+
+            Material mat = new Material(matBase);
+            mat.name = $"ChaseMario_{color}";
+            sm64Mario.useCustomTexture = true;
+            sm64Mario.tintColor = Color.white;
+
+            Texture2D teamTex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            teamTex.SetPixel(0, 0, color);
+            teamTex.SetPixel(0, 1, color);
+            teamTex.SetPixel(1, 0, color);
+            teamTex.SetPixel(1, 1, color);
+            teamTex.Apply();
+
+            mat.mainTexture = teamTex;
+            mat.SetTexture("_MainTex", teamTex);
+            mat.color = Color.white;
+
+            var materialField = typeof(SM64Mario).GetField("material", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (materialField != null)
+                materialField.SetValue(sm64Mario, mat);
+
+            Transform rendererChild = marioObj.transform.Find("MARIO");
+            if (rendererChild != null)
+            {
+                MeshRenderer mr = rendererChild.GetComponent<MeshRenderer>();
+                if (mr != null)
+                    mr.material = mat;
+            }
+        }
+
+        private Vector3 GetSpawnPosition(Transform spawnPoint)
+        {
+            if (spawnPoint != null)
+                return spawnPoint.position + Vector3.up;
+
+            return Vector3.up * 2f;
+        }
+
+        private void ProcessCombatCollision()
+        {
+            if (pursuer == null || fugitive == null)
+                return;
+
+            float dist = Vector3.Distance(pursuer.transform.position, fugitive.transform.position);
+            if (dist > catchDistance)
+                return;
+
+            pursuer.OnSuccessfulHit(0.8f);
+            fugitive.AddReward(-1.2f);
+            ResolvePursuerVictory();
+        }
+
+        private void ResolvePursuerVictory()
+        {
+            if (!duelActive)
+                return;
+
+            duelActive = false;
+            pursuer?.AddReward(8f);
+            fugitive?.AddReward(-8f);
+            EndAndReset();
+        }
+
+        public void ResolveTimeout()
+        {
+            if (!duelActive)
+                return;
+
+            duelActive = false;
+            pursuer?.AddReward(-6f);
+            fugitive?.AddReward(6f);
+            EndAndReset();
+        }
+
+        private void EndAndReset()
+        {
+            if (pursuer != null && pursuer.isActiveAndEnabled)
+                pursuer.EndEpisode();
+            if (fugitive != null && fugitive.isActiveAndEnabled)
+                fugitive.EndEpisode();
+
+            Invoke(nameof(ResetDuel), 1f);
+        }
+
+        private void ResetDuel()
+        {
+            if (pursuer != null && pursuer.gameObject != null)
+                Destroy(pursuer.gameObject);
+            if (fugitive != null && fugitive.gameObject != null)
+                Destroy(fugitive.gameObject);
+
+            pursuer = null;
+            fugitive = null;
+            duelActive = true;
+            SpawnDuelAgents();
+        }
+
+        public bool IsOutOfBounds(Vector3 position)
+        {
+            if (arenaCenter == null)
+                return false;
+            return Vector3.Distance(position, arenaCenter.position) > arenaRadius;
+        }
+    }
+}
