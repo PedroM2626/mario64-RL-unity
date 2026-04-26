@@ -1,6 +1,8 @@
 using UnityEngine;
 using LibSM64;
 using Unity.MLAgents;
+using Unity.MLAgents.Policies;
+using Unity.MLAgents.Actuators;
 
 namespace ParkourRL
 {
@@ -11,6 +13,7 @@ namespace ParkourRL
     /// </summary>
     public class ChaseTrainingEnvironment : MonoBehaviour
     {
+        private const int ContinuousActionSize = 5;
         private const string PursuerBehaviorName = "ChasePursuer";
         private const string FugitiveBehaviorName = "ChaseFugitive";
         private const int VectorObservationSize = 31;
@@ -45,6 +48,7 @@ namespace ParkourRL
         {
             EnsureAllMeshColliders();
             SM64Context.RefreshStaticTerrain();
+            SanitizeBehaviorParameters();
 
             if (!hasSpawned)
             {
@@ -114,6 +118,7 @@ namespace ParkourRL
             {
                 pursuer.opponent = fugitive;
                 fugitive.opponent = pursuer;
+                SanitizeBehaviorParameters();
                 duelActive = true;
                 battleStartTime = Time.time;
                 Debug.Log("[ChaseTraining] Episodio iniciado: Pursuer vs Fugitive.");
@@ -154,20 +159,51 @@ namespace ParkourRL
             combatCollider.radius = 1.5f;
             combatCollider.isTrigger = true;
 
-            var bp = marioObj.AddComponent<Unity.MLAgents.Policies.BehaviorParameters>();
+            var bp = marioObj.GetComponent<Unity.MLAgents.Policies.BehaviorParameters>();
+            if (bp == null)
+            {
+                bp = marioObj.AddComponent<Unity.MLAgents.Policies.BehaviorParameters>();
+            }
             bp.BehaviorName = behaviorName;
             bp.BehaviorType = Unity.MLAgents.Policies.BehaviorType.Default;
             bp.BrainParameters.VectorObservationSize = VectorObservationSize;
             bp.BrainParameters.NumStackedVectorObservations = 1;
-            bp.BrainParameters.ActionSpec = new Unity.MLAgents.Actuators.ActionSpec(5, System.Array.Empty<int>());
-            bp.TeamId = 0;
+            bp.BrainParameters.ActionSpec = ActionSpec.MakeContinuous(ContinuousActionSize);
+            bp.TeamId = role == ChaseRole.Pursuer ? 0 : 1;
 
-            var dr = marioObj.AddComponent<Unity.MLAgents.DecisionRequester>();
+            var dr = marioObj.GetComponent<Unity.MLAgents.DecisionRequester>();
+            if (dr == null)
+            {
+                dr = marioObj.AddComponent<Unity.MLAgents.DecisionRequester>();
+            }
             dr.DecisionPeriod = 5;
             dr.TakeActionsBetweenDecisions = true;
 
+            Debug.Log($"[ChaseTraining] Configurado {label}: behavior={bp.BehaviorName}, cont={bp.BrainParameters.ActionSpec.NumContinuousActions}, disc={bp.BrainParameters.ActionSpec.NumDiscreteActions}, team={bp.TeamId}");
+
             marioObj.SetActive(true);
             return chaseAgent;
+        }
+
+        private void SanitizeBehaviorParameters()
+        {
+            BehaviorParameters[] allBehaviorParameters = FindObjectsOfType<BehaviorParameters>();
+            foreach (BehaviorParameters bp in allBehaviorParameters)
+            {
+                if (bp == null)
+                    continue;
+
+                ActionSpec spec = bp.BrainParameters.ActionSpec;
+                if (spec.NumContinuousActions <= 0 && spec.NumDiscreteActions <= 0)
+                {
+                    bp.BrainParameters.ActionSpec = ActionSpec.MakeContinuous(ContinuousActionSize);
+                    if (string.IsNullOrWhiteSpace(bp.BehaviorName))
+                    {
+                        bp.BehaviorName = PursuerBehaviorName;
+                    }
+                    Debug.LogWarning($"[ChaseTraining] ActionSpec vazio detectado e corrigido em '{bp.BehaviorName}'.");
+                }
+            }
         }
 
         private void ApplyMarioMaterial(GameObject marioObj, SM64Mario sm64Mario, Material matBase, Color color)

@@ -2,6 +2,7 @@ using UnityEngine;
 using Unity.MLAgents;
 using Unity.MLAgents.Sensors;
 using Unity.MLAgents.Actuators;
+using Unity.MLAgents.Policies;
 
 namespace ParkourRL
 {
@@ -16,6 +17,7 @@ namespace ParkourRL
     /// </summary>
     public class ChaseAgent : Agent
     {
+        private const int ContinuousActionSize = 5;
         private const float CombatCooldown = 0.3f;
         private const float MaxEpisodeTime = 120f;
         private const float ButtonThreshold = 0.5f;
@@ -47,6 +49,7 @@ namespace ParkourRL
         public override void Initialize()
         {
             base.Initialize();
+            EnsureBehaviorParameters();
             ResetInputs();
             previousPosition = transform.position;
         }
@@ -225,6 +228,17 @@ namespace ParkourRL
             cameraLookDirection = Vector3.forward;
             lastKickTime = 0f;
             lastStompTime = 0f;
+        }
+
+        private void EnsureBehaviorParameters()
+        {
+            var bp = GetComponent<Unity.MLAgents.Policies.BehaviorParameters>();
+            if (bp == null)
+                return;
+
+            string expectedName = role == ChaseRole.Pursuer ? "ChasePursuer" : "ChaseFugitive";
+            bp.BehaviorName = expectedName;
+            bp.BrainParameters.ActionSpec = ActionSpec.MakeContinuous(ContinuousActionSize);
         }
     }
 }
