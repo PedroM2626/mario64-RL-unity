@@ -2,12 +2,14 @@ using UnityEngine;
 using System.Collections.Generic;
 using LibSM64;
 using Unity.Barracuda;
+using Unity.MLAgents;
 
 namespace ParkourRL
 {
     /// <summary>
     /// Ambiente de batalha em times: 2 times com 5 Marios cada competem.
-    /// Objetivo: derrotar o time adversário (eliminar todos os inimigos ou sair da arena).
+    /// Usa MA-POCA (Multi-Agent POsthumous Credit Assignment) para recompensas cooperativas.
+    /// Tipo de MARL: CTDE (Centralized Training with Decentralized Execution).
     /// </summary>
     public class TeamBattleEnvironment : MonoBehaviour
     {
@@ -48,6 +50,7 @@ namespace ParkourRL
 
         // Estruturas internas
         private List<TeamBattleAgent>[] agentsByTeam;           // agentsByTeam[0] = Team A, agentsByTeam[1] = Team B
+        private SimpleMultiAgentGroup[] teamGroups;             // MA-POCA groups: teamGroups[0] = Team A, teamGroups[1] = Team B
         private float battleStartTime;
         private bool battleActive = true;
         private bool hasSpawned = false;
@@ -57,6 +60,14 @@ namespace ParkourRL
             agentsByTeam = new List<TeamBattleAgent>[2];
             agentsByTeam[0] = new List<TeamBattleAgent>();
             agentsByTeam[1] = new List<TeamBattleAgent>();
+
+            // Inicializar grupos MA-POCA para cada time
+            teamGroups = new SimpleMultiAgentGroup[2];
+            for (int i = 0; i < 2; i++)
+            {
+                teamGroups[i] = new SimpleMultiAgentGroup();
+            }
+
             TryResolveWarmStartModel();
         }
 
@@ -283,34 +294,43 @@ namespace ParkourRL
             combatCollider.radius = 1.5f;
             combatCollider.isTrigger = true;
 
-            // Behavior Parameters (Agent already requires one; configure it instead of adding a duplicate)
+            // Behavior Parameters (esperado no prefab, fallback se ausente)
             var bp = marioObj.GetComponent<Unity.MLAgents.Policies.BehaviorParameters>();
             if (bp == null)
+            {
                 bp = marioObj.AddComponent<Unity.MLAgents.Policies.BehaviorParameters>();
-            bp.BehaviorName = "MarioTeamBattle";
+                bp.BehaviorName = "MarioTeamBattle";
+                bp.BehaviorType = Unity.MLAgents.Policies.BehaviorType.Default;
+                bp.BrainParameters.VectorObservationSize = 55;
+                bp.BrainParameters.NumStackedVectorObservations = 1;
+                bp.BrainParameters.ActionSpec = new Unity.MLAgents.Actuators.ActionSpec(2, new int[] { 2, 2, 2 });
+            }
+            // Sempre configurar TeamId em runtime (varia por time)
             bp.TeamId = teamId;
-            bp.BehaviorType = Unity.MLAgents.Policies.BehaviorType.Default;
+            // Warm-start model
             TryResolveWarmStartModel();
             if (useWarmStartModel && warmStartModel != null)
             {
                 bp.Model = warmStartModel;
             }
-            // Observations: 3 pos + 3 vel + 1 grounded + 16 raycasts + 1 ground height + 1 time
-            // + 15 teammates (5 agents * 3: pos, health, distance)
-            // + 15 enemies (5 agents * 3: pos, health, distance)
-            // = 3+3+1+16+1+1 + 15 + 15 = 55
-            bp.BrainParameters.VectorObservationSize = 55;
-            bp.BrainParameters.NumStackedVectorObservations = 1;
-            // 2 continuas (joystick) + 3 discretas (Jump[2], Kick[2], Stomp[2])
-            bp.BrainParameters.ActionSpec = new Unity.MLAgents.Actuators.ActionSpec(2, new int[] { 2, 2, 2 });
 
-            // Decision Requester
-            var dr = marioObj.AddComponent<Unity.MLAgents.DecisionRequester>();
-            dr.DecisionPeriod = 5;
-            dr.TakeActionsBetweenDecisions = true;
+            // Decision Requester (esperado no prefab, fallback se ausente)
+            var dr = marioObj.GetComponent<Unity.MLAgents.DecisionRequester>();
+            if (dr == null)
+            {
+                dr = marioObj.AddComponent<Unity.MLAgents.DecisionRequester>();
+                dr.DecisionPeriod = 5;
+                dr.TakeActionsBetweenDecisions = true;
+            }
 
             marioObj.SetActive(true);
             agentsByTeam[teamId].Add(agent);
+
+            // Registrar agente no grupo MA-POCA do seu time
+            if (teamGroups != null && teamGroups[teamId] != null)
+            {
+                teamGroups[teamId].RegisterAgent(agent);
+            }
 
             Debug.Log($"[TeamBattleEnv] Mario Team{teamName}_{indexInTeam} spawnado em {spawnPos}");
         }
@@ -416,9 +436,25 @@ namespace ParkourRL
 
             Debug.Log($"[TeamBattle] Mario Team{(agent.teamId == 0 ? 'A' : 'B')} foi eliminado!");
 
-            agentsByTeam[agent.teamId].Remove(agent);
-            agent.AddReward(-10f); // Penalidade por morte
+            int teamId = agent.teamId;
+            agentsByTeam[teamId].Remove(agent);
+
+            // Recompensa de time: eliminar inimigo beneficia TODO o time adversario
+            int enemyTeamId = 1 - teamId;
+            if (teamGroups != null && teamGroups[enemyTeamId] != null)
+            {
+                teamGroups[enemyTeamId].AddGroupReward(1.0f); // Group reward por eliminar inimigo
+            }
+
+            // Penalidade individual por morte (ja e suficiente)
+            agent.AddReward(-2f);
             agent.EndEpisode();
+
+            // Desregistrar do grupo MA-POCA antes de destruir
+            if (teamGroups != null && teamGroups[teamId] != null)
+            {
+                teamGroups[teamId].UnregisterAgent(agent);
+            }
 
             // Desativar imediatamente para que outros agentes nao tentem acessar
             agent.gameObject.SetActive(false);
@@ -442,57 +478,51 @@ namespace ParkourRL
 
             if (teamACount > teamBCount)
             {
-                // Time A venceu
-                foreach (var agent in agentsByTeam[0])
+                // Time A venceu: group reward para TODO o time (inclusive agentes ja eliminados via MA-POCA)
+                if (teamGroups[0] != null)
                 {
-                    if (agent != null && agent.isActiveAndEnabled)
-                    {
-                        agent.AddReward(20f + (maxBattleTime - timeElapsed) * 0.5f); // Recompensa vitória
-                    }
+                    teamGroups[0].AddGroupReward(10f + (maxBattleTime - timeElapsed) * 0.25f);
+                    teamGroups[0].EndGroupEpisode();
                 }
-                foreach (var agent in agentsByTeam[1])
+                if (teamGroups[1] != null)
                 {
-                    if (agent != null && agent.isActiveAndEnabled)
-                    {
-                        agent.AddReward(-5f); // Penalidade derrota
-                    }
+                    teamGroups[1].AddGroupReward(-3f);
+                    teamGroups[1].EndGroupEpisode();
                 }
                 Debug.Log($"[TeamBattle] Time A VENCEU! Tempo: {timeElapsed:F1}s");
             }
             else if (teamBCount > teamACount)
             {
                 // Time B venceu
-                foreach (var agent in agentsByTeam[1])
+                if (teamGroups[1] != null)
                 {
-                    if (agent != null && agent.isActiveAndEnabled)
-                    {
-                        agent.AddReward(20f + (maxBattleTime - timeElapsed) * 0.5f);
-                    }
+                    teamGroups[1].AddGroupReward(10f + (maxBattleTime - timeElapsed) * 0.25f);
+                    teamGroups[1].EndGroupEpisode();
                 }
-                foreach (var agent in agentsByTeam[0])
+                if (teamGroups[0] != null)
                 {
-                    if (agent != null && agent.isActiveAndEnabled)
-                    {
-                        agent.AddReward(-5f);
-                    }
+                    teamGroups[0].AddGroupReward(-3f);
+                    teamGroups[0].EndGroupEpisode();
                 }
                 Debug.Log($"[TeamBattle] Time B VENCEU! Tempo: {timeElapsed:F1}s");
             }
             else
             {
                 // Empate
-                foreach (var agent in agentsByTeam[0])
+                if (teamGroups[0] != null)
                 {
-                    if (agent != null) agent.AddReward(5f);
+                    teamGroups[0].AddGroupReward(2f);
+                    teamGroups[0].EndGroupEpisode();
                 }
-                foreach (var agent in agentsByTeam[1])
+                if (teamGroups[1] != null)
                 {
-                    if (agent != null) agent.AddReward(5f);
+                    teamGroups[1].AddGroupReward(2f);
+                    teamGroups[1].EndGroupEpisode();
                 }
                 Debug.Log($"[TeamBattle] EMPATE! Tempo: {timeElapsed:F1}s");
             }
 
-            // Finalizar todos os episódios
+            // Finalizar episódios individuais restantes (agentes ainda vivos)
             foreach (var team in agentsByTeam)
             {
                 foreach (var agent in team)
@@ -510,9 +540,19 @@ namespace ParkourRL
 
         private void ResetBattle()
         {
-            // Destruir todos os GameObjects dos agents antigos
+            // Destruir todos os GameObjects dos agents antigos e limpar grupos MA-POCA
             for (int t = 0; t < 2; t++)
             {
+                // Desregistrar todos os agentes do grupo MA-POCA um por um
+                if (teamGroups[t] != null)
+                {
+                    foreach (var agent in agentsByTeam[t])
+                    {
+                        if (agent != null)
+                            teamGroups[t].UnregisterAgent(agent);
+                    }
+                }
+
                 foreach (var agent in agentsByTeam[t])
                 {
                     if (agent != null && agent.gameObject != null)

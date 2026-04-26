@@ -322,36 +322,7 @@ namespace ParkourRL
                 }
             }
 
-            // -- Bônus por estar perto de teammates (cooperação) --
-            float nearestTeammateDistance = float.MaxValue;
-            foreach (var teammate in teammates)
-            {
-                if (teammate != null && teammate.gameObject.activeInHierarchy)
-                {
-                    float dist = Vector3.Distance(currentPos, teammate.transform.position);
-                    if (dist < nearestTeammateDistance)
-                        nearestTeammateDistance = dist;
-                }
-            }
-
-            if (nearestTeammateDistance < 15f && nearestTeammateDistance != float.MaxValue)
-            {
-                float teamworkBonus = (1f - (nearestTeammateDistance / 15f)) * 0.02f;
-                AddReward(teamworkBonus);
-            }
-
-            // -- Penalidade por não ter teammates vivos (isolamento) --
-            int aliveTeammates = 0;
-            foreach (var teammate in teammates)
-            {
-                if (teammate != null && teammate.gameObject.activeInHierarchy && teammate.currentHealth > 0)
-                    aliveTeammates++;
-            }
-
-            if (aliveTeammates == 0 && teammates.Count > 0)
-            {
-                AddReward(-0.05f); // Leve penalidade por estar sozinho
-            }
+            // (Recompensas de time removidas -- agora distribuidas via MA-POCA AddGroupReward no TeamBattleEnvironment)
 
             previousPosition = currentPos;
 
