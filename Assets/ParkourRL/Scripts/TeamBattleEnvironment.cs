@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections.Generic;
 using LibSM64;
+using Unity.Barracuda;
 
 namespace ParkourRL
 {
@@ -13,6 +14,17 @@ namespace ParkourRL
         [Header("Mario Setup")]
         [SerializeField] private GameObject marioPrefab;
         [SerializeField] private Material baseMarioMaterial;
+        [Tooltip("Material específico para o Time A. Se vazio, usa baseMarioMaterial com a cor do time.")]
+        [SerializeField] private Material teamAMaterial;
+        [Tooltip("Material específico para o Time B. Se vazio, usa baseMarioMaterial com a cor do time.")]
+        [SerializeField] private Material teamBMaterial;
+
+        [Header("Warm Start")]
+        [Tooltip("Usa um modelo base para warm-start do Mario no BehaviorParameters.")]
+        [SerializeField] private bool useWarmStartModel = false;
+        [SerializeField] private NNModel warmStartModel;
+        [Tooltip("Caminho do asset para auto-carregar o modelo no editor quando o campo acima estiver vazio.")]
+        [SerializeField] private string warmStartModelAssetPath = "";
 
         [Header("Arena Setup")]
         [SerializeField] private Transform[] teamASpawnPoints;  // 5 spawn points para Time A
@@ -28,9 +40,11 @@ namespace ParkourRL
         [SerializeField] private float stompDamage = 15f;       // Dano de um stompo
         [SerializeField] private float knockbackForce = 5f;     // Força de knockback ao ser atingido
 
-        // Cores dos times
-        private Color teamAColor = Color.red;
-        private Color teamBColor = new Color(0, 0.7f, 1f); // Azul claro
+        [Header("Team Colors")]
+        [Tooltip("Cor do Time A (default = vermelho). Deixe como (0,0,0,0) para usar o padrão vermelho.")]
+        [SerializeField] private Color teamAColor = Color.red;
+        [Tooltip("Cor do Time B (default = azul claro). Deixe como (0,0,0,0) para usar o padrão azul claro.")]
+        [SerializeField] private Color teamBColor = new Color(0, 0.7f, 1f);
 
         // Estruturas internas
         private List<TeamBattleAgent>[] agentsByTeam;           // agentsByTeam[0] = Team A, agentsByTeam[1] = Team B
@@ -43,6 +57,25 @@ namespace ParkourRL
             agentsByTeam = new List<TeamBattleAgent>[2];
             agentsByTeam[0] = new List<TeamBattleAgent>();
             agentsByTeam[1] = new List<TeamBattleAgent>();
+            TryResolveWarmStartModel();
+        }
+
+        void OnValidate()
+        {
+            TryResolveWarmStartModel();
+        }
+
+        private void TryResolveWarmStartModel()
+        {
+            if (!useWarmStartModel || warmStartModel != null)
+                return;
+
+#if UNITY_EDITOR
+            if (!string.IsNullOrWhiteSpace(warmStartModelAssetPath))
+            {
+                warmStartModel = UnityEditor.AssetDatabase.LoadAssetAtPath<NNModel>(warmStartModelAssetPath);
+            }
+#endif
         }
 
         void Start()
@@ -130,17 +163,19 @@ namespace ParkourRL
             }
 
             // Spawnar Time A (Red)
+            Material matA = (teamAMaterial != null) ? teamAMaterial : matBase;
             for (int i = 0; i < marioPerTeam; i++)
             {
                 Vector3 spawnPos = GetSpawnPosition(teamASpawnPoints, i);
-                SpawnMario(0, i, spawnPos, teamAColor, matBase);
+                SpawnMario(0, i, spawnPos, teamAColor, matA);
             }
 
             // Spawnar Time B (Blue)
+            Material matB = (teamBMaterial != null) ? teamBMaterial : matBase;
             for (int i = 0; i < marioPerTeam; i++)
             {
                 Vector3 spawnPos = GetSpawnPosition(teamBSpawnPoints, i);
-                SpawnMario(1, i, spawnPos, teamBColor, matBase);
+                SpawnMario(1, i, spawnPos, teamBColor, matB);
             }
 
             // Conectar agentes e rivals
@@ -194,13 +229,53 @@ namespace ParkourRL
             if (matBase != null)
             {
                 Material teamMat = new Material(matBase);
-                teamMat.color = teamColor;
                 teamMat.name = $"MarioMat_Team{teamName}_{indexInTeam}";
+
+                // Detectar se estamos usando um material customizado (teamAMaterial/teamBMaterial)
+                bool isCustomMaterial = (teamId == 0 && teamAMaterial != null) || (teamId == 1 && teamBMaterial != null);
+
+                // Sempre usar useCustomTexture=true para que SM64Mario.OnEnable()
+                // nao sobrescreva _MainTex com a textura nativa do Mario.
+                sm64Mario.useCustomTexture = true;
+                sm64Mario.tintColor = Color.white; // nao alterar vertex colors nativas
+
+                if (isCustomMaterial)
+                {
+                    // Material customizado: respeitar sua textura
+                    // Nada a fazer, a textura do material ja esta configurada
+                }
+                else
+                {
+                    // Sem material customizado: criar textura da cor do time e aplicar no corpo inteiro
+                    // O shader faz lerp(vertexColor, textureColor, textureAlpha). Se alpha=1, usa 100% textura.
+                    // Criamos uma textura 2x2 da cor do time para garantir cor uniforme.
+                    Texture2D teamTex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                    teamTex.SetPixel(0, 0, teamColor);
+                    teamTex.SetPixel(0, 1, teamColor);
+                    teamTex.SetPixel(1, 0, teamColor);
+                    teamTex.SetPixel(1, 1, teamColor);
+                    teamTex.Apply();
+                    teamMat.mainTexture = teamTex;
+                    teamMat.SetTexture("_MainTex", teamTex);
+                    teamMat.color = Color.white; // deixar tint neutro, a cor vem da textura
+                }
 
                 var materialField = typeof(SM64Mario).GetField("material",
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 if (materialField != null)
                     materialField.SetValue(sm64Mario, teamMat);
+
+                // O OnEnable() do SM64Mario ja rodou e criou o MeshRenderer com o material original.
+                // Precisamos atualizar o MeshRenderer filho diretamente para que a cor/textura novas sejam aplicadas.
+                Transform rendererChild = marioObj.transform.Find("MARIO");
+                if (rendererChild != null)
+                {
+                    MeshRenderer mr = rendererChild.GetComponent<MeshRenderer>();
+                    if (mr != null && teamMat != null)
+                    {
+                        mr.material = teamMat;
+                    }
+                }
             }
 
             // Collider para detecção de combate
@@ -215,6 +290,11 @@ namespace ParkourRL
             bp.BehaviorName = "MarioTeamBattle";
             bp.TeamId = teamId;
             bp.BehaviorType = Unity.MLAgents.Policies.BehaviorType.Default;
+            TryResolveWarmStartModel();
+            if (useWarmStartModel && warmStartModel != null)
+            {
+                bp.Model = warmStartModel;
+            }
             // Observations: 3 pos + 3 vel + 1 grounded + 16 raycasts + 1 ground height + 1 time
             // + 15 teammates (5 agents * 3: pos, health, distance)
             // + 15 enemies (5 agents * 3: pos, health, distance)

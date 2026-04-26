@@ -7,6 +7,12 @@ namespace LibSM64
     {
         [SerializeField] Material material = null;
 
+        [Tooltip("Se true, nao sobrescreve _MainTex com a textura default do Mario64.")]
+        public bool useCustomTexture = false;
+
+        [Tooltip("Quando diferente de branco, substitui as vertex colors nativas do Mario por esta cor uniforme.")]
+        public Color tintColor = Color.white;
+
         SM64InputProvider inputProvider;
 
         Vector3[][] positionBuffers;
@@ -57,7 +63,7 @@ namespace LibSM64
             if (material != null)
             {
                 renderer.material = material;
-                if (renderer.sharedMaterial != null)
+                if (renderer.sharedMaterial != null && !useCustomTexture)
                     renderer.sharedMaterial.SetTexture("_MainTex", Interop.marioTexture);
             }
 
@@ -161,7 +167,12 @@ namespace LibSM64
             states[buffIndex] = Interop.MarioTick( marioId, inputs, positionBuffers[buffIndex], normalBuffers[buffIndex], colorBuffer, uvBuffer );
 
             for( int i = 0; i < colorBuffer.Length; ++i )
-                colorBufferColors[i] = new Color( colorBuffer[i].x, colorBuffer[i].y, colorBuffer[i].z, 1 );
+            {
+                if (tintColor != Color.white)
+                    colorBufferColors[i] = tintColor;
+                else
+                    colorBufferColors[i] = new Color( colorBuffer[i].x, colorBuffer[i].y, colorBuffer[i].z, 1 );
+            }
 
             buffIndex = 1 - buffIndex;
         }
