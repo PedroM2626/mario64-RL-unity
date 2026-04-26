@@ -36,6 +36,7 @@ namespace ParkourRL
         private List<TeamBattleAgent>[] agentsByTeam;           // agentsByTeam[0] = Team A, agentsByTeam[1] = Team B
         private float battleStartTime;
         private bool battleActive = true;
+        private bool hasSpawned = false;
 
         void Awake()
         {
@@ -52,8 +53,12 @@ namespace ParkourRL
             // Recarregar terreno SM64
             SM64Context.RefreshStaticTerrain();
 
-            // Spawnar todos os Marios
-            Invoke(nameof(SpawnAllMarios), 0.5f);
+            // Spawnar todos os Marios (apenas uma vez)
+            if (!hasSpawned)
+            {
+                hasSpawned = true;
+                Invoke(nameof(SpawnAllMarios), 0.5f);
+            }
             
             battleStartTime = Time.time;
         }
@@ -203,9 +208,12 @@ namespace ParkourRL
             combatCollider.radius = 1.5f;
             combatCollider.isTrigger = true;
 
-            // Behavior Parameters
-            var bp = marioObj.AddComponent<Unity.MLAgents.Policies.BehaviorParameters>();
+            // Behavior Parameters (Agent already requires one; configure it instead of adding a duplicate)
+            var bp = marioObj.GetComponent<Unity.MLAgents.Policies.BehaviorParameters>();
+            if (bp == null)
+                bp = marioObj.AddComponent<Unity.MLAgents.Policies.BehaviorParameters>();
             bp.BehaviorName = "MarioTeamBattle";
+            bp.TeamId = teamId;
             bp.BehaviorType = Unity.MLAgents.Policies.BehaviorType.Default;
             // Observations: 3 pos + 3 vel + 1 grounded + 16 raycasts + 1 ground height + 1 time
             // + 15 teammates (5 agents * 3: pos, health, distance)
@@ -248,10 +256,12 @@ namespace ParkourRL
                         if (attacker.lastKickPressed && dist < 2f)
                         {
                             DealDamage(defender, kickDamage, attacker);
+                            attacker.lastKickPressed = false; // Resetar para evitar dano multiplo
                         }
                         if (attacker.lastStompPressed && dist < 2.5f)
                         {
                             DealDamage(defender, stompDamage, attacker);
+                            attacker.lastStompPressed = false; // Resetar para evitar dano multiplo
                         }
                     }
                 }
@@ -272,10 +282,12 @@ namespace ParkourRL
                         if (attacker.lastKickPressed && dist < 2f)
                         {
                             DealDamage(defender, kickDamage, attacker);
+                            attacker.lastKickPressed = false; // Resetar para evitar dano multiplo
                         }
                         if (attacker.lastStompPressed && dist < 2.5f)
                         {
                             DealDamage(defender, stompDamage, attacker);
+                            attacker.lastStompPressed = false; // Resetar para evitar dano multiplo
                         }
                     }
                 }
@@ -411,10 +423,17 @@ namespace ParkourRL
 
         private void ResetBattle()
         {
-            // Limpar agents antigos
-            foreach (var team in agentsByTeam)
+            // Destruir todos os GameObjects dos agents antigos
+            for (int t = 0; t < 2; t++)
             {
-                team.Clear();
+                foreach (var agent in agentsByTeam[t])
+                {
+                    if (agent != null && agent.gameObject != null)
+                    {
+                        Destroy(agent.gameObject);
+                    }
+                }
+                agentsByTeam[t].Clear();
             }
 
             battleActive = true;

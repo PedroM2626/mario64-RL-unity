@@ -9,6 +9,7 @@ namespace ParkourRL
     {
         private MarioRLAgent agent;
         private MarioCompetitiveAgent competitiveAgent;
+        private TeamBattleAgent teamBattleAgent;
         private Component backupAgent;
         private Type backupAgentType;
 
@@ -23,6 +24,8 @@ namespace ParkourRL
                 agent = GetComponent<MarioRLAgent>();
             if (competitiveAgent == null)
                 competitiveAgent = GetComponent<MarioCompetitiveAgent>();
+            if (teamBattleAgent == null)
+                teamBattleAgent = GetComponent<TeamBattleAgent>();
             if (backupAgent == null)
             {
                 if (backupAgentType == null)
@@ -79,6 +82,8 @@ namespace ParkourRL
                 return agent.cameraLookDirection.normalized;
             if (competitiveAgent != null)
                 return competitiveAgent.cameraLookDirection.normalized;
+            if (teamBattleAgent != null)
+                return teamBattleAgent.cameraLookDirection.normalized;
             if (backupAgent != null)
                 return ReadBackupVector3("cameraLookDirection").normalized;
             return Vector3.forward;
@@ -91,6 +96,8 @@ namespace ParkourRL
                 return agent.joystickInput;
             if (competitiveAgent != null)
                 return competitiveAgent.joystickInput;
+            if (teamBattleAgent != null)
+                return teamBattleAgent.joystickInput;
             if (backupAgent != null)
                 return ReadBackupVector2("joystickInput");
             return Vector2.zero;
@@ -118,6 +125,17 @@ namespace ParkourRL
                     case Button.Jump: return competitiveAgent.jumpPressed;
                     case Button.Kick: return competitiveAgent.kickPressed;
                     case Button.Stomp: return competitiveAgent.stompPressed;
+                    default: return false;
+                }
+            }
+
+            if (teamBattleAgent != null)
+            {
+                switch (button)
+                {
+                    case Button.Jump: return teamBattleAgent.jumpPressed;
+                    case Button.Kick: return teamBattleAgent.kickPressed;
+                    case Button.Stomp: return teamBattleAgent.stompPressed;
                     default: return false;
                 }
             }

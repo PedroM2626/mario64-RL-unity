@@ -236,9 +236,24 @@ namespace ParkourRL
             stompPressed = lastStompPressed;
 
             // Câmera aponta na direção do inimigo mais próximo
-            if (rivals.Count > 0)
+            TeamBattleAgent nearestRivalForCam = null;
+            float nearestDist = float.MaxValue;
+            foreach (var rival in rivals)
             {
-                Vector3 toNearestRival = (rivals[0].transform.position - transform.position).normalized;
+                if (rival != null && rival.gameObject.activeInHierarchy && rival.currentHealth > 0)
+                {
+                    float d = Vector3.Distance(transform.position, rival.transform.position);
+                    if (d < nearestDist)
+                    {
+                        nearestDist = d;
+                        nearestRivalForCam = rival;
+                    }
+                }
+            }
+
+            if (nearestRivalForCam != null)
+            {
+                Vector3 toNearestRival = (nearestRivalForCam.transform.position - transform.position).normalized;
                 cameraLookDirection = toNearestRival;
                 cameraLookDirection.y = 0;
                 if (cameraLookDirection.sqrMagnitude < 0.01f)
@@ -253,6 +268,29 @@ namespace ParkourRL
             float moveDelta = Vector3.Distance(currentPos, previousPosition);
             float stepPenalty = (moveDelta < 0.05f) ? -0.01f : -0.003f;
             AddReward(stepPenalty);
+
+            // -- Recompensa por aproximar do inimigo mais proximo --
+            float nearestRivalDistance = float.MaxValue;
+            TeamBattleAgent nearestRival = null;
+            foreach (var rival in rivals)
+            {
+                if (rival != null && rival.gameObject.activeInHierarchy && rival.currentHealth > 0)
+                {
+                    float dist = Vector3.Distance(currentPos, rival.transform.position);
+                    if (dist < nearestRivalDistance)
+                    {
+                        nearestRivalDistance = dist;
+                        nearestRival = rival;
+                    }
+                }
+            }
+
+            if (nearestRival != null && nearestRivalDistance < 30f)
+            {
+                // Recompensa maior quanto mais perto do inimigo (max 0.05 por step)
+                float approachReward = (1f - Mathf.Clamp01(nearestRivalDistance / 30f)) * 0.02f;
+                AddReward(approachReward);
+            }
 
             // -- Recompensa por atacar (detectada em ProcessCombatCollisions) --
             // (Adicionada em DealDamage pelo environment)

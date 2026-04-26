@@ -49,6 +49,7 @@ namespace LibSM64
 
             marioRendererObject = new GameObject("MARIO");
             marioRendererObject.hideFlags |= HideFlags.HideInHierarchy;
+            marioRendererObject.transform.SetParent(transform, false);
             
             var renderer = marioRendererObject.AddComponent<MeshRenderer>();
             var meshFilter = marioRendererObject.AddComponent<MeshFilter>();
