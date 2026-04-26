@@ -824,7 +824,10 @@ MonoBehaviour:
   arenaCenter: {fileID: 1234567918}
   arenaRadius: 18
   maxBattleTime: 90
-  catchDistance: 2
+  catchDistance: 0.5
+  catchGraceAfterSpawn: 1.5
+  spawnJitterRadius: 1.25
+  minimumSpawnSeparation: 6
   pursuerColor: {r: 1, g: 0, b: 0, a: 1}
   fugitiveColor: {r: 0, g: 0.7, b: 1, a: 1}
 --- !u!33 &1234567922

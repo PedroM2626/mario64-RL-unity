@@ -33,6 +33,9 @@ namespace ParkourRL
         [Header("Chase Settings")]
         [SerializeField] private float maxBattleTime = 90f;
         [SerializeField] private float catchDistance = 2f;
+        [SerializeField] private float catchGraceAfterSpawn = 1.5f;
+        [SerializeField] private float spawnJitterRadius = 1.25f;
+        [SerializeField] private float minimumSpawnSeparation = 6f;
 
         [Header("Visual")]
         [SerializeField] private Color pursuerColor = Color.red;
@@ -41,6 +44,7 @@ namespace ParkourRL
         private ChaseAgent pursuer;
         private ChaseAgent fugitive;
         private float battleStartTime;
+        private float lastSpawnTime;
         private bool duelActive = true;
         private bool hasSpawned;
 
@@ -111,8 +115,12 @@ namespace ParkourRL
             Material matPursuer = pursuerMaterial != null ? pursuerMaterial : matBase;
             Material matFugitive = fugitiveMaterial != null ? fugitiveMaterial : matBase;
 
-            pursuer = SpawnMario("Pursuer", ChaseRole.Pursuer, GetSpawnPosition(pursuerSpawnPoint), pursuerColor, matPursuer, PursuerBehaviorName);
-            fugitive = SpawnMario("Fugitive", ChaseRole.Fugitive, GetSpawnPosition(fugitiveSpawnPoint), fugitiveColor, matFugitive, FugitiveBehaviorName);
+            Vector3 pursuerSpawnPos = GetSpawnPosition(pursuerSpawnPoint);
+            Vector3 fugitiveSpawnPos = GetSpawnPosition(fugitiveSpawnPoint);
+            ApplySpawnJitter(ref pursuerSpawnPos, ref fugitiveSpawnPos);
+
+            pursuer = SpawnMario("Pursuer", ChaseRole.Pursuer, pursuerSpawnPos, pursuerColor, matPursuer, PursuerBehaviorName);
+            fugitive = SpawnMario("Fugitive", ChaseRole.Fugitive, fugitiveSpawnPos, fugitiveColor, matFugitive, FugitiveBehaviorName);
 
             if (pursuer != null && fugitive != null)
             {
@@ -120,8 +128,9 @@ namespace ParkourRL
                 fugitive.opponent = pursuer;
                 SanitizeBehaviorParameters();
                 duelActive = true;
+                lastSpawnTime = Time.time;
                 battleStartTime = Time.time;
-                Debug.Log("[ChaseTraining] Episodio iniciado: Pursuer vs Fugitive.");
+                Debug.Log($"[ChaseTraining] Episodio iniciado: Pursuer vs Fugitive. Distancia inicial={(Vector3.Distance(pursuerSpawnPos, fugitiveSpawnPos)):F2}");
             }
         }
 
@@ -253,6 +262,10 @@ namespace ParkourRL
             if (pursuer == null || fugitive == null)
                 return;
 
+            // Evita captura instantanea durante o settling do spawn/fisica.
+            if (Time.time - lastSpawnTime < catchGraceAfterSpawn)
+                return;
+
             float dist = Vector3.Distance(pursuer.transform.position, fugitive.transform.position);
             if (dist > catchDistance)
                 return;
@@ -291,20 +304,48 @@ namespace ParkourRL
             if (fugitive != null && fugitive.isActiveAndEnabled)
                 fugitive.EndEpisode();
 
+            CancelInvoke(nameof(ResetDuel));
             Invoke(nameof(ResetDuel), 1f);
         }
 
         private void ResetDuel()
         {
             if (pursuer != null && pursuer.gameObject != null)
+            {
+                pursuer.gameObject.SetActive(false);
                 Destroy(pursuer.gameObject);
+            }
             if (fugitive != null && fugitive.gameObject != null)
+            {
+                fugitive.gameObject.SetActive(false);
                 Destroy(fugitive.gameObject);
+            }
 
             pursuer = null;
             fugitive = null;
             duelActive = true;
             SpawnDuelAgents();
+        }
+
+        private void ApplySpawnJitter(ref Vector3 pursuerPos, ref Vector3 fugitivePos)
+        {
+            Vector2 pursuerJitter = Random.insideUnitCircle * spawnJitterRadius;
+            Vector2 fugitiveJitter = Random.insideUnitCircle * spawnJitterRadius;
+
+            pursuerPos += new Vector3(pursuerJitter.x, 0f, pursuerJitter.y);
+            fugitivePos += new Vector3(fugitiveJitter.x, 0f, fugitiveJitter.y);
+
+            float separation = Vector3.Distance(pursuerPos, fugitivePos);
+            if (separation < minimumSpawnSeparation)
+            {
+                Vector3 away = (fugitivePos - pursuerPos);
+                away.y = 0f;
+                if (away.sqrMagnitude < 0.001f)
+                    away = Vector3.right;
+                away.Normalize();
+                float needed = minimumSpawnSeparation - separation;
+                fugitivePos += away * needed;
+            }
         }
 
         public bool IsOutOfBounds(Vector3 position)
