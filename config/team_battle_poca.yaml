@@ -1,5 +1,30 @@
+default_settings:
+  trainer_type: poca
+  hyperparameters:
+    batch_size: 2048
+    buffer_size: 20480
+    learning_rate: 0.0003
+    learning_rate_schedule: linear
+    beta: 0.005
+    epsilon: 0.2
+    lambd: 0.95
+    num_epoch: 3
+  network_settings:
+    normalize: true
+    hidden_units: 512
+    num_layers: 3
+  reward_signals:
+    extrinsic:
+      gamma: 0.99
+      strength: 1.0
+  checkpoint_interval: 200000
+  max_steps: 10000000
+  time_horizon: 128
+  summary_freq: 5000
+  threaded: true
+
 behaviors:
-  MarioTeamBattle:
+  MarioTeamBattle: &team_battle_behavior
     trainer_type: poca
 
     hyperparameters:
@@ -21,19 +46,6 @@ behaviors:
       extrinsic:
         gamma: 0.99
         strength: 1.0
-      curiosity:
-        gamma: 0.99
-        strength: 0.01
-        encoding_size: 128
-        learning_rate: 0.0003
-      gail:
-        gamma: 0.99
-        strength: 0.05
-        encoding_size: 128
-        learning_rate: 0.0003
-        use_actions: false
-        use_vail: false
-        demo_path: # Deixe vazio ou preencha com caminho para demonstracoes
 
     # Self-play para competicao em times
     self_play:
@@ -52,6 +64,9 @@ behaviors:
     summary_freq: 5000
 
     threaded: true
+
+  My Behavior:
+    <<: *team_battle_behavior
 
 engine_settings:
   width: 1280

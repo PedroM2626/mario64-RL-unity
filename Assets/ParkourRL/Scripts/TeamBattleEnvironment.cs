@@ -13,6 +13,9 @@ namespace ParkourRL
     /// </summary>
     public class TeamBattleEnvironment : MonoBehaviour
     {
+        private const string TeamBattleBehaviorName = "MarioTeamBattle";
+        private const int TeamBattleVectorObservationSize = 56;
+
         [Header("Mario Setup")]
         [SerializeField] private GameObject marioPrefab;
         [SerializeField] private Material baseMarioMaterial;
@@ -294,17 +297,19 @@ namespace ParkourRL
             combatCollider.radius = 1.5f;
             combatCollider.isTrigger = true;
 
-            // Behavior Parameters (esperado no prefab, fallback se ausente)
+            // Behavior Parameters (forcar em runtime para evitar inconsistencias da cena/prefab)
             var bp = marioObj.GetComponent<Unity.MLAgents.Policies.BehaviorParameters>();
             if (bp == null)
             {
                 bp = marioObj.AddComponent<Unity.MLAgents.Policies.BehaviorParameters>();
-                bp.BehaviorName = "MarioTeamBattle";
-                bp.BehaviorType = Unity.MLAgents.Policies.BehaviorType.Default;
-                bp.BrainParameters.VectorObservationSize = 55;
-                bp.BrainParameters.NumStackedVectorObservations = 1;
-                bp.BrainParameters.ActionSpec = new Unity.MLAgents.Actuators.ActionSpec(2, new int[] { 2, 2, 2 });
             }
+
+            bp.BehaviorName = TeamBattleBehaviorName;
+            bp.BehaviorType = Unity.MLAgents.Policies.BehaviorType.Default;
+            bp.BrainParameters.VectorObservationSize = TeamBattleVectorObservationSize;
+            bp.BrainParameters.NumStackedVectorObservations = 1;
+            bp.BrainParameters.ActionSpec = new Unity.MLAgents.Actuators.ActionSpec(2, new int[] { 2, 2, 2 });
+
             // Sempre configurar TeamId em runtime (varia por time)
             bp.TeamId = teamId;
             // Warm-start model

@@ -121,7 +121,7 @@ namespace ParkourRL
             rivals = new List<TeamBattleAgent>(allRivals);
         }
 
-        // ===== OBSERVACOES: 55 total =====
+        // ===== OBSERVACOES: 56 total =====
         public override void CollectObservations(VectorSensor sensor)
         {
             Vector3 position = transform.position;
@@ -227,7 +227,6 @@ namespace ParkourRL
             sensor.AddObservation(Mathf.Clamp(currentHealth / maxHealth, 0f, 1f));
 
             // Total: 3 + 3 + 1 + 16 + 1 + 1 + 15 + 15 + 1 = 56
-            // Arredondando para 55 como especificado
         }
 
         public override void OnActionReceived(ActionBuffers actions)
