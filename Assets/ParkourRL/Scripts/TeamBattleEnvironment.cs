@@ -335,7 +335,9 @@ namespace ParkourRL
             agent.AddReward(-10f); // Penalidade por morte
             agent.EndEpisode();
 
-            // Destruir após um delay para animação
+            // Desativar imediatamente para que outros agentes nao tentem acessar
+            agent.gameObject.SetActive(false);
+            // Destruir após um delay para limpeza
             Destroy(agent.gameObject, 0.2f);
         }
 

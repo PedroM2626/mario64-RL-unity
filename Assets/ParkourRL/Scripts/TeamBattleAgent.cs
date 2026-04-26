@@ -52,6 +52,20 @@ namespace ParkourRL
         private const float MAX_EPISODE_TIME = 120f;
         private RaycastHit[] raycastHitsCache = new RaycastHit[1];
 
+        /// <summary>
+        /// Retorna uma lista filtrada contendo apenas agentes que ainda existem e estao ativos.
+        /// </summary>
+        private List<TeamBattleAgent> GetValidAgents(List<TeamBattleAgent> source)
+        {
+            List<TeamBattleAgent> valid = new List<TeamBattleAgent>();
+            foreach (var a in source)
+            {
+                if (a != null && a.gameObject != null && a.gameObject.activeInHierarchy)
+                    valid.Add(a);
+            }
+            return valid;
+        }
+
         void Awake()
         {
             if (marioComponent == null)
@@ -161,15 +175,15 @@ namespace ParkourRL
             sensor.AddObservation(episodeTime / MAX_EPISODE_TIME);
 
             // [15 obs] Informações sobre até 5 teammates: [posX, posZ, health]
-            // Ordenar por proximidade
-            List<TeamBattleAgent> sortedTeammates = new List<TeamBattleAgent>(teammates);
+            // Ordenar por proximidade (filtrar destruidos primeiro)
+            List<TeamBattleAgent> sortedTeammates = GetValidAgents(teammates);
             sortedTeammates.Sort((a, b) =>
                 Vector3.Distance(position, a.transform.position).CompareTo(
                     Vector3.Distance(position, b.transform.position)));
 
             for (int i = 0; i < 5; i++)
             {
-                if (i < sortedTeammates.Count && sortedTeammates[i] != null && sortedTeammates[i].gameObject.activeInHierarchy)
+                if (i < sortedTeammates.Count)
                 {
                     Vector3 toTeammate = sortedTeammates[i].transform.position - position;
                     float teammateDist = toTeammate.magnitude;
@@ -186,14 +200,14 @@ namespace ParkourRL
             }
 
             // [15 obs] Informações sobre até 5 rivais: [posX, posZ, health]
-            List<TeamBattleAgent> sortedRivals = new List<TeamBattleAgent>(rivals);
+            List<TeamBattleAgent> sortedRivals = GetValidAgents(rivals);
             sortedRivals.Sort((a, b) =>
                 Vector3.Distance(position, a.transform.position).CompareTo(
                     Vector3.Distance(position, b.transform.position)));
 
             for (int i = 0; i < 5; i++)
             {
-                if (i < sortedRivals.Count && sortedRivals[i] != null && sortedRivals[i].gameObject.activeInHierarchy)
+                if (i < sortedRivals.Count)
                 {
                     Vector3 toRival = sortedRivals[i].transform.position - position;
                     float rivalDist = toRival.magnitude;
@@ -400,11 +414,12 @@ namespace ParkourRL
 
         void OnDrawGizmosSelected()
         {
-            // Desenhar linha para o inimigo mais próximo
-            if (rivals.Count > 0 && rivals[0] != null)
+            // Desenhar linha para o inimigo mais próximo valido
+            var validRivals = GetValidAgents(rivals);
+            if (validRivals.Count > 0)
             {
                 Gizmos.color = Color.red;
-                Gizmos.DrawLine(transform.position, rivals[0].transform.position);
+                Gizmos.DrawLine(transform.position, validRivals[0].transform.position);
             }
 
             // Desenhar saúde
