@@ -28,7 +28,8 @@ namespace ParkourRL
         public ChaseAgent opponent;
 
         [Header("Observations")]
-        [SerializeField] private int raycastCount = 8;
+        [SerializeField] private int raycastCount = 0;
+        public int RaycastCount => raycastCount;
         [SerializeField] private float raycastDistance = 10f;
 
         [HideInInspector] public Vector2 joystickInput;

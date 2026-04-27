@@ -29,12 +29,19 @@ def main():
         with open(args.config, 'r') as f:
             config_data = yaml.safe_load(f)
             
-        # Logar alguns meta-dados chave
-        mlflow.log_param("trainer_type", config_data['behaviors']['MarioParkour']['trainer_type'])
-        mlflow.log_param("max_steps", config_data['behaviors']['MarioParkour']['max_steps'])
-        mlflow.log_param("batch_size", config_data['behaviors']['MarioParkour']['hyperparameters']['batch_size'])
-        mlflow.log_param("learning_rate", config_data['behaviors']['MarioParkour']['hyperparameters']['learning_rate'])
-        mlflow.log_param("hidden_units", config_data['behaviors']['MarioParkour']['network_settings']['hidden_units'])
+        # Logar alguns meta-dados chave (pega o primeiro behavior disponivel)
+        behaviors = config_data.get('behaviors', {})
+        first_behavior_name = next(iter(behaviors.keys()), None) if behaviors else None
+        if first_behavior_name:
+            first_behavior = behaviors[first_behavior_name]
+            mlflow.log_param("behavior_name", first_behavior_name)
+            mlflow.log_param("trainer_type", first_behavior.get('trainer_type', 'unknown'))
+            mlflow.log_param("max_steps", first_behavior.get('max_steps', 0))
+            mlflow.log_param("batch_size", first_behavior.get('hyperparameters', {}).get('batch_size', 0))
+            mlflow.log_param("learning_rate", first_behavior.get('hyperparameters', {}).get('learning_rate', 0))
+            mlflow.log_param("hidden_units", first_behavior.get('network_settings', {}).get('hidden_units', 0))
+        else:
+            mlflow.log_param("trainer_type", config_data.get('default_settings', {}).get('trainer_type', 'unknown'))
         
         mlflow.log_artifact(args.config, artifact_path="configs")
         
@@ -60,16 +67,16 @@ def main():
             print(f"\nTreinamento interrompido pelo usuário.")
             mlflow.log_param("status", "interrupted")
         
-        # No final, o modelo ONNX e os logs do tensorboard estarão em results/run_id/
-        model_path = f"results/{args.run_id}/MarioParkour.onnx"
-        if os.path.exists(model_path):
-            print(f"Salvando modelo gerado no MLOps: {model_path}")
-            mlflow.log_artifact(model_path, artifact_path="models")
-            
-        # Salvar as métricas finais / summaries 
-        pt_path = f"results/{args.run_id}/MarioParkour"
-        if os.path.exists(pt_path):
-            mlflow.log_artifacts(pt_path, artifact_path="pytorch_models")
+        # No final, tentar salvar modelos de todos os behaviors encontrados
+        behaviors = config_data.get('behaviors', {})
+        for behavior_name in behaviors.keys():
+            model_path = f"results/{args.run_id}/{behavior_name}.onnx"
+            if os.path.exists(model_path):
+                print(f"Salvando modelo gerado no MLOps: {model_path}")
+                mlflow.log_artifact(model_path, artifact_path="models")
+            pt_path = f"results/{args.run_id}/{behavior_name}"
+            if os.path.exists(pt_path):
+                mlflow.log_artifacts(pt_path, artifact_path="pytorch_models")
 
 if __name__ == "__main__":
     main()

@@ -270,6 +270,7 @@ Dois times de agentes cooperam/competem.
 | **HybridTraining.unity** | IL + Offline RL | Recording mode | ✅ Sim |
 | **CompetitiveParkour.unity** | Competição 1v1 | 2 Agentes | ✅ Sim |
 | **TeamBattle.unity** | Team 2v2 | 4 Agentes | ✅ Sim |
+| **ChaseTraining.unity** | Perseguição 1v1 (SAC) | 2 Agentes (Pursuer + Fugitive) | ✅ Sim |
 
 ---
 
@@ -353,6 +354,42 @@ python train_offline_rl.py \
 4. AI Mario (azul) = ML-Agents (treina em tempo real)
 5. Pressione M para alternar entre Training/Recording
 ```
+
+---
+
+### Opção 5: Treino Chase (Pursuer vs Fugitive - SAC)
+
+Treinamento descentralizado com dois agentes SAC: um perseguidor e um fugitivo.
+
+```powershell
+# Terminal 1
+.\train_chase.ps1
+
+# Terminal 2: No Unity
+1. Abra ChaseTraining.unity
+2. Play
+3. Aguarde o spawn automático dos agents
+```
+
+**Observações (31-dim):**
+| Campo | Índices | Valores |
+|-------|---------|---------|
+| Posição local (x,y,z) | 0-2 | [-1, 1] |
+| Velocidade (x,y,z) | 3-5 | [-1, 1] |
+| Grounded | 6 | {0, 1} |
+| Oponente relativo (x,y,z,dist) | 7-10 | [-1, 1] |
+| Velocidade oponente (x,y,z) | 11-13 | [-1, 1] |
+| Tempo normalizado | 14 | [0, 1] |
+| Raycasts | 15-30 | [0, 1] |
+
+**Actions (5 continuous):**
+- `[0]` Joystick X: [-1, 1]
+- `[1]` Joystick Y: [-1, 1]
+- `[2]` Pular: [0, 1]
+- `[3]` Chute/Soco: [0, 1]
+- `[4]` Rasteira/Stomp: [0, 1]
+
+**Nota de performance:** O algoritmo SAC faz updates da rede neural a cada passo. Para evitar congelamentos, a configuração usa `time_scale: 1.0`, `steps_per_update: 4` e `DecisionPeriod: 8`.
 
 ---
 
@@ -529,6 +566,18 @@ pip install --upgrade ml-agents==0.28.0 ml-agents-envs==0.28.0
 # ou use venv
 .\setup_python39.ps1
 ```
+
+### Problema: "Unity congela durante treino ChaseTraining (SAC)"
+
+**Causa:** SAC com `steps_per_update: 1` faz updates da rede neural a cada step do ambiente. Com `time_scale` alto, o Python trainer não consegue acompanhar a Unity e fica bloqueado em `DecideAction`.
+
+**Solução (já aplicada na config):**
+- `steps_per_update: 4` — reduz frequência de updates da rede
+- `time_scale: 1.0` — diminui velocidade de simulação
+- `DecisionPeriod: 8` — reduz requisições de decisão por segundo
+- `batch_size: 512` — aproveita melhor o hardware em cada update
+
+Se ainda congelar, reduza ainda mais o `time_scale` ou aumente `steps_per_update`.
 
 ---
 

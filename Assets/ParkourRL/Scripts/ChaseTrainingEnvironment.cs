@@ -48,6 +48,10 @@ namespace ParkourRL
         private Material fugitiveRuntimeMaterial;
         private Texture2D pursuerRuntimeTexture;
         private Texture2D fugitiveRuntimeTexture;
+        // Track which BehaviorParameters have already been sanitized to avoid reprocessing
+        private System.Collections.Generic.HashSet<int> sanitizedBPInstanceIDs = new System.Collections.Generic.HashSet<int>();
+        // Track which behavior names have already produced a warning to rate-limit logs
+        private System.Collections.Generic.HashSet<string> warnedBehaviorNames = new System.Collections.Generic.HashSet<string>();
         private float battleStartTime;
         private float lastSpawnTime;
         private bool duelActive = true;
@@ -238,7 +242,15 @@ namespace ParkourRL
             }
             bp.BehaviorName = behaviorName;
             bp.BehaviorType = Unity.MLAgents.Policies.BehaviorType.Default;
-            bp.BrainParameters.VectorObservationSize = VectorObservationSize;
+            // Compute observation size dynamically based on agent raycast count:
+            // Base observations: 3 pos + 3 vel + 1 grounded + 7 opponent info + 1 time = 15
+            int obsSize = 15;
+            var chaseComp = chaseAgent as ChaseAgent;
+            if (chaseComp != null)
+            {
+                obsSize += chaseComp.RaycastCount * 2;
+            }
+            bp.BrainParameters.VectorObservationSize = obsSize;
             bp.BrainParameters.NumStackedVectorObservations = 1;
             bp.BrainParameters.ActionSpec = ActionSpec.MakeContinuous(ContinuousActionSize);
             bp.TeamId = role == ChaseRole.Pursuer ? 0 : 1;
@@ -248,7 +260,7 @@ namespace ParkourRL
             {
                 dr = marioObj.AddComponent<Unity.MLAgents.DecisionRequester>();
             }
-            dr.DecisionPeriod = 5;
+            dr.DecisionPeriod = 8;
             dr.TakeActionsBetweenDecisions = true;
 
             if (enableEpisodeLogs)
@@ -268,6 +280,26 @@ namespace ParkourRL
                 if (bp == null)
                     continue;
 
+                // Skip already sanitized instances
+                int id = bp.GetInstanceID();
+                if (sanitizedBPInstanceIDs.Contains(id))
+                    continue;
+
+                // Only sanitize BehaviorParameters that belong to our environment-managed agents.
+                // Criteria: has a ChaseAgent on the same GameObject OR the GameObject name follows the spawned Mario_* pattern.
+                var go = bp.gameObject;
+                bool belongsToEnvironment = false;
+                if (go != null)
+                {
+                    if (go.GetComponent<ChaseAgent>() != null)
+                        belongsToEnvironment = true;
+                    else if (!string.IsNullOrEmpty(go.name) && go.name.StartsWith("Mario_"))
+                        belongsToEnvironment = true;
+                }
+
+                if (!belongsToEnvironment)
+                    continue;
+
                 ActionSpec spec = bp.BrainParameters.ActionSpec;
                 if (spec.NumContinuousActions <= 0 && spec.NumDiscreteActions <= 0)
                 {
@@ -276,8 +308,17 @@ namespace ParkourRL
                     {
                         bp.BehaviorName = PursuerBehaviorName;
                     }
-                    Debug.LogWarning($"[ChaseTraining] ActionSpec vazio detectado e corrigido em '{bp.BehaviorName}'.");
+
+                    // Log the correction once per behavior name to avoid console spam
+                    string bname = string.IsNullOrWhiteSpace(bp.BehaviorName) ? "<unnamed>" : bp.BehaviorName;
+                    if (!warnedBehaviorNames.Contains(bname))
+                    {
+                        Debug.LogWarning($"[ChaseTraining] ActionSpec vazio detectado e corrigido em '{bname}'.");
+                        warnedBehaviorNames.Add(bname);
+                    }
                 }
+
+                sanitizedBPInstanceIDs.Add(id);
             }
         }
 
