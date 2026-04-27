@@ -210,6 +210,14 @@ namespace ParkourRL
             AddReward(reward);
         }
 
+        public void ResetForNewEpisode()
+        {
+            ResetInputs();
+            episodeTime = 0f;
+            previousPosition = transform.position;
+            previousOpponentDistance = GetOpponentDistance();
+        }
+
         private float GetOpponentDistance()
         {
             if (opponent == null || !opponent.gameObject.activeInHierarchy)

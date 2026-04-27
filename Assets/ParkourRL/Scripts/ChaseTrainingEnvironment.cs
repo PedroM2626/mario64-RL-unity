@@ -40,9 +40,14 @@ namespace ParkourRL
         [Header("Visual")]
         [SerializeField] private Color pursuerColor = Color.red;
         [SerializeField] private Color fugitiveColor = new Color(0.2f, 0.9f, 1f);
+        [SerializeField] private bool enableEpisodeLogs = false;
 
         private ChaseAgent pursuer;
         private ChaseAgent fugitive;
+        private Material pursuerRuntimeMaterial;
+        private Material fugitiveRuntimeMaterial;
+        private Texture2D pursuerRuntimeTexture;
+        private Texture2D fugitiveRuntimeTexture;
         private float battleStartTime;
         private float lastSpawnTime;
         private bool duelActive = true;
@@ -112,15 +117,31 @@ namespace ParkourRL
             }
 
             Material matBase = ResolveBaseMaterial();
-            Material matPursuer = pursuerMaterial != null ? pursuerMaterial : matBase;
-            Material matFugitive = fugitiveMaterial != null ? fugitiveMaterial : matBase;
+            EnsureRuntimeVisualResources(matBase);
 
             Vector3 pursuerSpawnPos = GetSpawnPosition(pursuerSpawnPoint);
             Vector3 fugitiveSpawnPos = GetSpawnPosition(fugitiveSpawnPoint);
             ApplySpawnJitter(ref pursuerSpawnPos, ref fugitiveSpawnPos);
 
-            pursuer = SpawnMario("Pursuer", ChaseRole.Pursuer, pursuerSpawnPos, pursuerColor, matPursuer, PursuerBehaviorName);
-            fugitive = SpawnMario("Fugitive", ChaseRole.Fugitive, fugitiveSpawnPos, fugitiveColor, matFugitive, FugitiveBehaviorName);
+            if (pursuer == null)
+            {
+                pursuer = SpawnMario("Pursuer", ChaseRole.Pursuer, pursuerSpawnPos, pursuerRuntimeMaterial, PursuerBehaviorName);
+            }
+            if (fugitive == null)
+            {
+                fugitive = SpawnMario("Fugitive", ChaseRole.Fugitive, fugitiveSpawnPos, fugitiveRuntimeMaterial, FugitiveBehaviorName);
+            }
+
+            if (pursuer != null)
+            {
+                pursuer.gameObject.SetActive(true);
+                pursuer.transform.SetPositionAndRotation(pursuerSpawnPos, Quaternion.identity);
+            }
+            if (fugitive != null)
+            {
+                fugitive.gameObject.SetActive(true);
+                fugitive.transform.SetPositionAndRotation(fugitiveSpawnPos, Quaternion.identity);
+            }
 
             if (pursuer != null && fugitive != null)
             {
@@ -130,8 +151,51 @@ namespace ParkourRL
                 duelActive = true;
                 lastSpawnTime = Time.time;
                 battleStartTime = Time.time;
-                Debug.Log($"[ChaseTraining] Episodio iniciado: Pursuer vs Fugitive. Distancia inicial={(Vector3.Distance(pursuerSpawnPos, fugitiveSpawnPos)):F2}");
+                pursuer.ResetForNewEpisode();
+                fugitive.ResetForNewEpisode();
+                if (enableEpisodeLogs)
+                {
+                    Debug.Log($"[ChaseTraining] Episodio iniciado: Pursuer vs Fugitive. Distancia inicial={(Vector3.Distance(pursuerSpawnPos, fugitiveSpawnPos)):F2}");
+                }
             }
+        }
+
+        private void EnsureRuntimeVisualResources(Material matBase)
+        {
+            if (pursuerRuntimeMaterial == null)
+            {
+                Material source = pursuerMaterial != null ? pursuerMaterial : matBase;
+                pursuerRuntimeMaterial = CreateRuntimeMaterial(source, pursuerColor, "Pursuer", out pursuerRuntimeTexture);
+            }
+
+            if (fugitiveRuntimeMaterial == null)
+            {
+                Material source = fugitiveMaterial != null ? fugitiveMaterial : matBase;
+                fugitiveRuntimeMaterial = CreateRuntimeMaterial(source, fugitiveColor, "Fugitive", out fugitiveRuntimeTexture);
+            }
+        }
+
+        private Material CreateRuntimeMaterial(Material sourceMaterial, Color color, string label, out Texture2D texture)
+        {
+            texture = null;
+            if (sourceMaterial == null)
+                return null;
+
+            Material mat = new Material(sourceMaterial);
+            mat.name = $"ChaseMario_{label}";
+
+            texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            texture.name = $"ChaseTex_{label}";
+            texture.SetPixel(0, 0, color);
+            texture.SetPixel(0, 1, color);
+            texture.SetPixel(1, 0, color);
+            texture.SetPixel(1, 1, color);
+            texture.Apply();
+
+            mat.mainTexture = texture;
+            mat.SetTexture("_MainTex", texture);
+            mat.color = Color.white;
+            return mat;
         }
 
         private Material ResolveBaseMaterial()
@@ -150,7 +214,7 @@ namespace ParkourRL
             return matBase;
         }
 
-        private ChaseAgent SpawnMario(string label, ChaseRole role, Vector3 spawnPos, Color color, Material baseMat, string behaviorName)
+        private ChaseAgent SpawnMario(string label, ChaseRole role, Vector3 spawnPos, Material runtimeMaterial, string behaviorName)
         {
             GameObject marioObj = new GameObject($"Mario_{label}");
             marioObj.SetActive(false);
@@ -162,7 +226,7 @@ namespace ParkourRL
 
             marioObj.AddComponent<MarioInputProvider>();
             SM64Mario sm64Mario = marioObj.AddComponent<SM64Mario>();
-            ApplyMarioMaterial(marioObj, sm64Mario, baseMat, color);
+            ApplyMarioMaterial(marioObj, sm64Mario, runtimeMaterial);
 
             SphereCollider combatCollider = marioObj.AddComponent<SphereCollider>();
             combatCollider.radius = 1.5f;
@@ -188,7 +252,10 @@ namespace ParkourRL
             dr.DecisionPeriod = 5;
             dr.TakeActionsBetweenDecisions = true;
 
-            Debug.Log($"[ChaseTraining] Configurado {label}: behavior={bp.BehaviorName}, cont={bp.BrainParameters.ActionSpec.NumContinuousActions}, disc={bp.BrainParameters.ActionSpec.NumDiscreteActions}, team={bp.TeamId}");
+            if (enableEpisodeLogs)
+            {
+                Debug.Log($"[ChaseTraining] Configurado {label}: behavior={bp.BehaviorName}, cont={bp.BrainParameters.ActionSpec.NumContinuousActions}, disc={bp.BrainParameters.ActionSpec.NumDiscreteActions}, team={bp.TeamId}");
+            }
 
             marioObj.SetActive(true);
             return chaseAgent;
@@ -215,37 +282,24 @@ namespace ParkourRL
             }
         }
 
-        private void ApplyMarioMaterial(GameObject marioObj, SM64Mario sm64Mario, Material matBase, Color color)
+        private void ApplyMarioMaterial(GameObject marioObj, SM64Mario sm64Mario, Material runtimeMaterial)
         {
-            if (matBase == null)
+            if (runtimeMaterial == null)
                 return;
 
-            Material mat = new Material(matBase);
-            mat.name = $"ChaseMario_{color}";
             sm64Mario.useCustomTexture = true;
             sm64Mario.tintColor = Color.white;
 
-            Texture2D teamTex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-            teamTex.SetPixel(0, 0, color);
-            teamTex.SetPixel(0, 1, color);
-            teamTex.SetPixel(1, 0, color);
-            teamTex.SetPixel(1, 1, color);
-            teamTex.Apply();
-
-            mat.mainTexture = teamTex;
-            mat.SetTexture("_MainTex", teamTex);
-            mat.color = Color.white;
-
             var materialField = typeof(SM64Mario).GetField("material", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             if (materialField != null)
-                materialField.SetValue(sm64Mario, mat);
+                materialField.SetValue(sm64Mario, runtimeMaterial);
 
             Transform rendererChild = marioObj.transform.Find("MARIO");
             if (rendererChild != null)
             {
                 MeshRenderer mr = rendererChild.GetComponent<MeshRenderer>();
                 if (mr != null)
-                    mr.material = mat;
+                    mr.material = runtimeMaterial;
             }
         }
 
@@ -310,19 +364,6 @@ namespace ParkourRL
 
         private void ResetDuel()
         {
-            if (pursuer != null && pursuer.gameObject != null)
-            {
-                pursuer.gameObject.SetActive(false);
-                Destroy(pursuer.gameObject);
-            }
-            if (fugitive != null && fugitive.gameObject != null)
-            {
-                fugitive.gameObject.SetActive(false);
-                Destroy(fugitive.gameObject);
-            }
-
-            pursuer = null;
-            fugitive = null;
             duelActive = true;
             SpawnDuelAgents();
         }
