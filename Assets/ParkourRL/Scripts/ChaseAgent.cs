@@ -1,5 +1,4 @@
 using UnityEngine;
-using LibSM64;
 using Unity.MLAgents;
 using Unity.MLAgents.Sensors;
 using Unity.MLAgents.Actuators;
@@ -187,14 +186,7 @@ namespace ParkourRL
 
             if (chaseEnvironment != null && chaseEnvironment.IsOutOfBounds(transform.position))
             {
-                // Soft boundary: teleportar de volta para dentro da arena
-                Vector3 validPos = chaseEnvironment.GetNearestValidPosition(transform.position);
-                SM64Mario sm64 = GetComponent<SM64Mario>();
-                if (sm64 != null)
-                    sm64.Teleport(validPos);
-                else
-                    transform.position = validPos;
-                AddReward(-0.5f); // Penalidade maior por tentar sair
+                AddReward(-0.05f);
             }
 
             if (episodeTime >= GetEpisodeTimeout())

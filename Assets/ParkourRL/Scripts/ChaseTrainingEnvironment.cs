@@ -101,7 +101,6 @@ namespace ParkourRL
 
         private void EnsureAllMeshColliders()
         {
-            // Processar terrenos SM64 existentes
             SM64StaticTerrain[] terrains = FindObjectsOfType<SM64StaticTerrain>();
             foreach (var terrain in terrains)
             {
@@ -116,117 +115,6 @@ namespace ParkourRL
                     }
                 }
             }
-
-            // Verificar e corrigir barreiras/arena limits (objetos com Collider mas sem SM64StaticTerrain)
-            ProcessBarrierColliders();
-        }
-
-        private void ProcessBarrierColliders()
-        {
-            // Encontrar todos os Colliders que podem ser barreiras (BoxCollider, MeshCollider)
-            // mas nao sao triggers e nao tem SM64StaticTerrain
-            BoxCollider[] boxColliders = FindObjectsOfType<BoxCollider>();
-            foreach (var bc in boxColliders)
-            {
-                if (bc.isTrigger) continue;
-                if (bc.GetComponent<SM64StaticTerrain>() != null) continue;
-                if (bc.GetComponent<ChaseAgent>() != null) continue; // Ignorar agentes
-
-                // Verificar escala negativa
-                Vector3 scale = bc.transform.lossyScale;
-                if (scale.x < 0 || scale.y < 0 || scale.z < 0)
-                {
-                    Debug.LogWarning($"[ChaseTraining] BoxCollider com escala negativa detectado em '{bc.gameObject.name}'. " +
-                        "Isso causa erros de colisao. Corrija a escala no Inspector (torne todos os valores positivos).");
-                }
-
-                // Converter barreiras de arena em objetos colidiveis para SM64
-                if (IsLikelyBarrier(bc.gameObject.name))
-                {
-                    Debug.Log($"[ChaseTraining] Convertendo barreira para SM64 terrain: {bc.gameObject.name}");
-
-                    // Criar ou obter MeshFilter
-                    MeshFilter mf = bc.gameObject.GetComponent<MeshFilter>();
-                    if (mf == null)
-                    {
-                        mf = bc.gameObject.AddComponent<MeshFilter>();
-                        // Criar mesh de cubo baseado no tamanho do BoxCollider
-                        mf.sharedMesh = CreateCubeMeshFromBoxCollider(bc);
-                    }
-
-                    // Criar MeshCollider se necessario (o SM64 precisa disso para colisao)
-                    MeshCollider mc = bc.gameObject.GetComponent<MeshCollider>();
-                    if (mc == null)
-                    {
-                        mc = bc.gameObject.AddComponent<MeshCollider>();
-                        mc.sharedMesh = mf.sharedMesh;
-                        mc.convex = false;
-                    }
-
-                    // Adicionar SM64StaticTerrain para que o SM64 processe a colisao
-                    if (bc.gameObject.GetComponent<SM64StaticTerrain>() == null)
-                    {
-                        bc.gameObject.AddComponent<SM64StaticTerrain>();
-                        Debug.Log($"[ChaseTraining] SM64StaticTerrain adicionado em: {bc.gameObject.name}");
-                    }
-                }
-            }
-        }
-
-        private Mesh CreateCubeMeshFromBoxCollider(BoxCollider bc)
-        {
-            // Criar um mesh de cubo simples baseado no tamanho do BoxCollider
-            Vector3 size = bc.size;
-            Vector3 center = bc.center;
-
-            // Vertices do cubo (8 vertices)
-            Vector3[] vertices = new Vector3[8];
-            float hx = size.x * 0.5f;
-            float hy = size.y * 0.5f;
-            float hz = size.z * 0.5f;
-
-            vertices[0] = center + new Vector3(-hx, -hy, -hz);
-            vertices[1] = center + new Vector3( hx, -hy, -hz);
-            vertices[2] = center + new Vector3( hx,  hy, -hz);
-            vertices[3] = center + new Vector3(-hx,  hy, -hz);
-            vertices[4] = center + new Vector3(-hx, -hy,  hz);
-            vertices[5] = center + new Vector3( hx, -hy,  hz);
-            vertices[6] = center + new Vector3( hx,  hy,  hz);
-            vertices[7] = center + new Vector3(-hx,  hy,  hz);
-
-            // Triangulos (12 triangulos = 6 faces * 2 triangulos cada)
-            int[] triangles = new int[]
-            {
-                // Front face (z-)
-                0, 2, 1, 0, 3, 2,
-                // Back face (z+)
-                5, 7, 4, 5, 6, 7,
-                // Left face (x-)
-                4, 3, 0, 4, 7, 3,
-                // Right face (x+)
-                1, 6, 5, 1, 2, 6,
-                // Top face (y+)
-                3, 6, 2, 3, 7, 6,
-                // Bottom face (y-)
-                4, 1, 5, 4, 0, 1
-            };
-
-            Mesh mesh = new Mesh();
-            mesh.vertices = vertices;
-            mesh.triangles = triangles;
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
-            mesh.name = $"ProceduralCube_{bc.gameObject.name}";
-
-            return mesh;
-        }
-
-        private bool IsLikelyBarrier(string name)
-        {
-            string lower = name.ToLower();
-            return lower.Contains("arena") || lower.Contains("limit") || lower.Contains("barrier") ||
-                   lower.Contains("wall") || lower.Contains("border") || lower.Contains("boundary") ||
-                   lower.Contains("cube") || lower.Contains("box");
         }
 
         private void SpawnDuelAgents()
@@ -589,25 +477,6 @@ namespace ParkourRL
             if (arenaCenter == null)
                 return false;
             return Vector3.Distance(position, arenaCenter.position) > arenaRadius;
-        }
-
-        public Vector3 GetNearestValidPosition(Vector3 currentPosition)
-        {
-            if (arenaCenter == null)
-                return currentPosition;
-
-            Vector3 toCenter = arenaCenter.position - currentPosition;
-            float distToCenter = toCenter.magnitude;
-
-            if (distToCenter <= arenaRadius)
-                return currentPosition; // Já está dentro
-
-            // Projeta o ponto de volta para o limite da arena
-            Vector3 dirToCenter = toCenter.normalized;
-            Vector3 validPos = arenaCenter.position - dirToCenter * (arenaRadius * 0.9f); // 90% do raio para margem de seguranca
-            validPos.y = Mathf.Max(currentPosition.y, arenaCenter.position.y + 1f); // Mantém altura mínima
-
-            return validPos;
         }
 
         public float EpisodeTimeoutSeconds => maxBattleTime;
