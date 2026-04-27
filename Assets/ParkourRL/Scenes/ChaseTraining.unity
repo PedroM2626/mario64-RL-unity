@@ -823,7 +823,7 @@ MonoBehaviour:
   fugitiveSpawnPoint: {fileID: 1234567908}
   arenaCenter: {fileID: 1234567918}
   arenaRadius: 18
-  maxBattleTime: 90
+  maxBattleTime: 30
   catchDistance: 0.5
   catchGraceAfterSpawn: 1.5
   spawnJitterRadius: 1.25

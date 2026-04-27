@@ -147,7 +147,6 @@ namespace ParkourRL
             {
                 pursuer.opponent = fugitive;
                 fugitive.opponent = pursuer;
-                SanitizeBehaviorParameters();
                 duelActive = true;
                 lastSpawnTime = Time.time;
                 battleStartTime = Time.time;
