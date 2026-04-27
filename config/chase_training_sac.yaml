@@ -38,4 +38,4 @@ engine_settings:
   quality_level: 2
   time_scale: 6.0
   target_frame_rate: -1
-  no_graphics: false
+  no_graphics: true

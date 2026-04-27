@@ -19,8 +19,8 @@ namespace ParkourRL
     {
         private const int ContinuousActionSize = 5;
         private const float CombatCooldown = 0.3f;
-        private const float MaxEpisodeTime = 120f;
         private const float ButtonThreshold = 0.5f;
+        private const float DefaultEpisodeTimeout = 30f;
 
         [Header("Role")]
         public ChaseRole role = ChaseRole.Pursuer;
@@ -64,6 +64,7 @@ namespace ParkourRL
 
         public override void CollectObservations(VectorSensor sensor)
         {
+            float maxEpisodeTime = GetEpisodeTimeout();
             Vector3 position = transform.position;
             Vector3 envOffset = chaseEnvironment != null ? chaseEnvironment.transform.position : Vector3.zero;
             Vector3 localPos = position - envOffset;
@@ -106,7 +107,7 @@ namespace ParkourRL
             }
 
             // [1] Tempo normalizado
-            sensor.AddObservation(Mathf.Clamp01(episodeTime / MaxEpisodeTime));
+            sensor.AddObservation(Mathf.Clamp01(episodeTime / maxEpisodeTime));
 
             // [16] Raycasts
             for (int i = 0; i < raycastCount; i++)
@@ -185,7 +186,7 @@ namespace ParkourRL
                 AddReward(-0.05f);
             }
 
-            if (episodeTime >= MaxEpisodeTime)
+            if (episodeTime >= GetEpisodeTimeout())
             {
                 chaseEnvironment?.ResolveTimeout();
                 return;
@@ -247,6 +248,15 @@ namespace ParkourRL
             string expectedName = role == ChaseRole.Pursuer ? "ChasePursuer" : "ChaseFugitive";
             bp.BehaviorName = expectedName;
             bp.BrainParameters.ActionSpec = ActionSpec.MakeContinuous(ContinuousActionSize);
+        }
+
+        private float GetEpisodeTimeout()
+        {
+            if (chaseEnvironment != null)
+            {
+                return Mathf.Max(1f, chaseEnvironment.EpisodeTimeoutSeconds);
+            }
+            return DefaultEpisodeTimeout;
         }
     }
 }

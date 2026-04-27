@@ -31,7 +31,7 @@ namespace ParkourRL
         [SerializeField] private float arenaRadius = 22f;
 
         [Header("Chase Settings")]
-        [SerializeField] private float maxBattleTime = 90f;
+        [SerializeField] private float maxBattleTime = 30f;
         [SerializeField] private float catchDistance = 2f;
         [SerializeField] private float catchGraceAfterSpawn = 1.5f;
         [SerializeField] private float spawnJitterRadius = 1.25f;
@@ -395,5 +395,7 @@ namespace ParkourRL
                 return false;
             return Vector3.Distance(position, arenaCenter.position) > arenaRadius;
         }
+
+        public float EpisodeTimeoutSeconds => maxBattleTime;
     }
 }
