@@ -1,4 +1,5 @@
 using UnityEngine;
+using LibSM64;
 using Unity.MLAgents;
 using Unity.MLAgents.Sensors;
 using Unity.MLAgents.Actuators;
@@ -39,6 +40,7 @@ namespace ParkourRL
         [HideInInspector] public Vector3 cameraLookDirection;
         [HideInInspector] public bool lastKickPressed;
         [HideInInspector] public bool lastStompPressed;
+        [HideInInspector] public bool attackExecutedThisFrame;
 
         private float episodeTime;
         private float lastKickTime;
@@ -149,6 +151,7 @@ namespace ParkourRL
 
             kickPressed = lastKickPressed;
             stompPressed = lastStompPressed;
+            attackExecutedThisFrame = lastKickPressed || lastStompPressed;
 
             if (opponent != null)
             {
@@ -184,7 +187,14 @@ namespace ParkourRL
 
             if (chaseEnvironment != null && chaseEnvironment.IsOutOfBounds(transform.position))
             {
-                AddReward(-0.05f);
+                // Soft boundary: teleportar de volta para dentro da arena
+                Vector3 validPos = chaseEnvironment.GetNearestValidPosition(transform.position);
+                SM64Mario sm64 = GetComponent<SM64Mario>();
+                if (sm64 != null)
+                    sm64.Teleport(validPos);
+                else
+                    transform.position = validPos;
+                AddReward(-0.5f); // Penalidade maior por tentar sair
             }
 
             if (episodeTime >= GetEpisodeTimeout())
@@ -235,9 +245,15 @@ namespace ParkourRL
             stompPressed = false;
             lastKickPressed = false;
             lastStompPressed = false;
+            attackExecutedThisFrame = false;
             cameraLookDirection = Vector3.forward;
             lastKickTime = 0f;
             lastStompTime = 0f;
+        }
+
+        public void ClearAttackFlags()
+        {
+            attackExecutedThisFrame = false;
         }
 
         private void EnsureBehaviorParameters()
