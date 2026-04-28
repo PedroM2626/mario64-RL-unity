@@ -1,28 +1,5 @@
-# Unity ML-Agents
-mlagents==0.28.0
-
-# Dependências ML-Agents
-numpy>=1.21.0
-torch>=1.7.0
-tensorboard>=2.7.0
-protobuf>=3.19.0,<4.0.0
-
-# Para treinamento em cloud (opcional)
-# mlagents-cloud-utils
-
-# Utilitários
-pyyaml>=5.4.0
-
-# MLOps
 mlflow>=2.0.0
-
-# Hybrid Training System (IL + Offline RL)
-# Scikit-learn para Behavior Cloning
-scikit-learn>=0.24.0
-
-# Plotting para análise de dados
-matplotlib>=3.4.0
-
-# Exportar para ONNX
-onnx>=1.10.0
-onnxruntime>=1.9.0
+mlagents==1.0.0
+torch>=1.11.0
+onnx
+pyyaml

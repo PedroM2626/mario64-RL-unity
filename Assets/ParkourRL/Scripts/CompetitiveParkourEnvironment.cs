@@ -1,12 +1,12 @@
 using UnityEngine;
+using UnityEngine.UI;
 using System.Collections.Generic;
 using LibSM64;
 
 namespace ParkourRL
 {
     /// <summary>
-    /// Ambiente competitivo: varios Marios competem no mesmo mapa de parkour.
-    /// Cada Mario pertence a um time (cor diferente), pode colidir e atacar os outros.
+    /// Ambiente para teste simultaneo de algoritmos (PPO, SAC, DQN).
     /// </summary>
     public class CompetitiveParkourEnvironment : MonoBehaviour
     {
@@ -19,32 +19,76 @@ namespace ParkourRL
         [SerializeField] private Transform goal;
 
         [Header("Competition")]
-        [SerializeField] private int marioCount = 4;
+        [SerializeField] private int marioCount = 3;
         [SerializeField] private Color[] teamColors = new Color[]
         {
-            Color.red,
-            Color.blue,
-            Color.green,
-            Color.yellow,
-            new Color(1f, 0.5f, 0f), // Laranja
-            new Color(0.5f, 0f, 1f), // Roxo
-            new Color(0f, 1f, 1f),   // Ciano
-            new Color(1f, 0f, 1f)    // Magenta
+            Color.red,   // PPO
+            Color.blue,  // SAC
+            Color.green  // DQN
         };
+        private string[] behaviorNames = new string[] { "MarioParkourPPO", "MarioParkourSAC", "MarioParkourDQN" };
 
         private List<MarioCompetitiveAgent> agents = new List<MarioCompetitiveAgent>();
         private int finishOrder = 0; // Contador de quem terminou
+        
+        // Placar
+        private Dictionary<string, int> scores = new Dictionary<string, int>();
+        private Text scoreText;
 
         void Start()
         {
             // Garantir MeshColliders
             EnsureAllMeshColliders();
 
+            // Setup UI Scoreboard
+            SetupScoreboard();
+
             // Recarregar terreno SM64
             SM64Context.RefreshStaticTerrain();
 
             // Spawnar todos os Marios
             Invoke(nameof(SpawnAllMarios), 0.5f);
+        }
+
+        private void SetupScoreboard()
+        {
+            scores["PPO"] = 0;
+            scores["SAC"] = 0;
+            scores["DQN"] = 0;
+
+            GameObject canvasObj = new GameObject("ScoreCanvas");
+            Canvas canvas = canvasObj.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvasObj.AddComponent<CanvasScaler>();
+            canvasObj.AddComponent<GraphicRaycaster>();
+
+            GameObject textObj = new GameObject("ScoreText");
+            textObj.transform.SetParent(canvasObj.transform);
+            scoreText = textObj.AddComponent<Text>();
+            scoreText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            scoreText.fontSize = 24;
+            scoreText.color = Color.white;
+            scoreText.alignment = TextAnchor.UpperRight;
+            
+            RectTransform rt = scoreText.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(1, 1);
+            rt.anchorMax = new Vector2(1, 1);
+            rt.pivot = new Vector2(1, 1);
+            rt.anchoredPosition = new Vector2(-20, -20);
+            rt.sizeDelta = new Vector2(300, 200);
+
+            UpdateScoreboardUI();
+        }
+
+        private void UpdateScoreboardUI()
+        {
+            if (scoreText != null)
+            {
+                scoreText.text = $"<b>Vitórias por Modelo:</b>\n" +
+                                 $"<color=red>PPO: {scores["PPO"]}</color>\n" +
+                                 $"<color=blue>SAC: {scores["SAC"]}</color>\n" +
+                                 $"<color=green>DQN: {scores["DQN"]}</color>";
+            }
         }
 
         private void EnsureAllMeshColliders()
@@ -96,16 +140,14 @@ namespace ParkourRL
             for (int i = 0; i < marioCount; i++)
             {
                 Vector3 spawnPos;
-                if (spawnPoints != null && i < spawnPoints.Length && spawnPoints[i] != null)
+                if (spawnPoints != null && spawnPoints.Length > 0 && spawnPoints[0] != null)
                 {
-                    spawnPos = spawnPoints[i].position + Vector3.up * 1f;
+                    // Todos spawnando exatamente no mesmo lugar
+                    spawnPos = spawnPoints[0].position + Vector3.up * 1f;
                 }
                 else
                 {
-                    // Distribuir em linha se nao houver spawn points suficientes
-                    spawnPos = (spawnPoints != null && spawnPoints.Length > 0 && spawnPoints[0] != null)
-                        ? spawnPoints[0].position + Vector3.up * 1f + Vector3.right * (i * 2f)
-                        : Vector3.up * 2f + Vector3.right * (i * 2f);
+                    spawnPos = Vector3.up * 2f;
                 }
 
                 Color teamColor = teamColors[i % teamColors.Length];
@@ -152,7 +194,7 @@ namespace ParkourRL
 
             // Behavior Parameters
             var bp = marioObj.AddComponent<Unity.MLAgents.Policies.BehaviorParameters>();
-            bp.BehaviorName = "MarioCompetitive";
+            bp.BehaviorName = index < behaviorNames.Length ? behaviorNames[index] : "MarioParkourPPO";
             bp.BehaviorType = Unity.MLAgents.Policies.BehaviorType.Default;
             bp.BrainParameters.VectorObservationSize = 42; // 30 base + 12 rivais
             bp.BrainParameters.NumStackedVectorObservations = 1;
@@ -174,13 +216,19 @@ namespace ParkourRL
             Debug.Log($"[CompetitiveEnv] Mario Team{index} spawnado em {spawnPos} (cor: {teamColor})");
         }
 
-        /// <summary>
-        /// Chamado quando um Mario chega ao Goal. Retorna a posicao (1=primeiro, 2=segundo, etc.)
-        /// </summary>
         public int RegisterFinish(MarioCompetitiveAgent agent)
         {
             finishOrder++;
             int position = finishOrder;
+            
+            if (position == 1) // Apenas o primeiro que termina ganha ponto
+            {
+                if (agent.teamId == 0) scores["PPO"]++;
+                else if (agent.teamId == 1) scores["SAC"]++;
+                else if (agent.teamId == 2) scores["DQN"]++;
+                
+                UpdateScoreboardUI();
+            }
 
             // Notificar rivais
             foreach (var a in agents)
@@ -219,17 +267,13 @@ namespace ParkourRL
             int idx = agents.IndexOf(agent);
             Vector3 spawnPos;
 
-            if (spawnPoints != null && idx < spawnPoints.Length && idx >= 0 && spawnPoints[idx] != null)
+            if (spawnPoints != null && spawnPoints.Length > 0 && spawnPoints[0] != null)
             {
-                spawnPos = spawnPoints[idx].position + Vector3.up * 1f;
-            }
-            else if (spawnPoints != null && spawnPoints.Length > 0 && spawnPoints[0] != null)
-            {
-                spawnPos = spawnPoints[0].position + Vector3.up * 1f + Vector3.right * (idx * 2f);
+                spawnPos = spawnPoints[0].position + Vector3.up * 1f;
             }
             else
             {
-                spawnPos = Vector3.up * 2f + Vector3.right * (idx * 2f);
+                spawnPos = Vector3.up * 2f;
             }
 
             SM64Mario sm64Mario = agent.GetComponent<SM64Mario>();
@@ -245,16 +289,11 @@ namespace ParkourRL
 
         public Vector3 GetCurrentSpawnPoint(MarioCompetitiveAgent agent)
         {
-            int idx = agents.IndexOf(agent);
-            if (spawnPoints != null && idx < spawnPoints.Length && idx >= 0 && spawnPoints[idx] != null)
+            if (spawnPoints != null && spawnPoints.Length > 0 && spawnPoints[0] != null)
             {
-                return spawnPoints[idx].position;
+                return spawnPoints[0].position;
             }
-            else if (spawnPoints != null && spawnPoints.Length > 0 && spawnPoints[0] != null)
-            {
-                return spawnPoints[0].position + Vector3.right * (idx * 2f);
-            }
-            return Vector3.right * (idx * 2f);
+            return Vector3.zero;
         }
 
         void OnDrawGizmos()

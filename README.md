@@ -2,6 +2,13 @@
 
 Sistema completo para treinar agentes de IA em ambientes de parkour do Super Mario 64 usando **Reinforcement Learning**, **Imitation Learning** e **Offline RL**.
 
+## Novidades: Parkour Simultâneo (PPO, SAC, DQN)
+O projeto agora suporta o teste e treinamento simultâneo de 3 algoritmos no mesmo ambiente de parkour. Nenhum agente perde pontos para o outro, eles disputam de forma pura quem termina o percurso primeiro e o domina.
+- **Mario PPO (Vermelho)**
+- **Mario SAC (Azul)**
+- **Mario DQN/PPO-variant (Verde)**
+Inclui também um placar na tela (UI) registrando as vitórias de cada modelo e integração total com MLOps (via MLflow) para registrar automaticamente os modelos, parâmetros e métricas.
+
 ---
 
 ## 📋 Índice
@@ -11,6 +18,7 @@ Sistema completo para treinar agentes de IA em ambientes de parkour do Super Mar
 - [Sistemas de Treinamento](#sistemas-de-treinamento)
 - [Cenas Disponíveis](#cenas-disponíveis)
 - [Instruções de Uso](#instruções-de-uso)
+- [Treinamento MLOps](#treinamento-mlops)
 - [API e Componentes](#api-e-componentes)
 - [Troubleshooting](#troubleshooting)
 
@@ -292,6 +300,28 @@ mlagents-learn Assets/ParkourRL/Config/mario_parkour.yaml --run-id parkour_v1
 - Step 0-100k: Mario aprende a se mover
 - Step 100k-500k: Mario tenta pular plataformas
 - Step 500k+: Mario consegue completar o parkour
+
+---
+
+### Treinamento MLOps (Parkour Simultâneo)
+
+Para utilizar o pipeline de MLOps no modo de parkour simultâneo:
+
+```powershell
+# 1. Instalar dependências (inclui MLflow, ML-Agents e Torch)
+pip install -r requirements.txt
+
+# 2. Rodar o treinamento com registro automático
+python train_mlops.py --config Assets/ParkourRL/Config/mario_parkour.yaml
+
+# 3. No Unity, abra a cena CompetitiveParkour.unity e dê Play
+# Os 3 Marios (PPO, SAC, DQN) começarão a correr no parkour juntos.
+
+# 4. Acompanhar métricas e modelos gerados:
+mlflow ui
+# Acesse no navegador: http://localhost:5000
+```
+O script `train_mlops.py` registrará a run, o YAML configurado, parâmetros de cada modelo e, ao fim, todos os `.onnx` exportados. Também existe um `Dockerfile` caso prefira containerizar o ambiente Python.
 
 ---
 

@@ -265,14 +265,16 @@ namespace ParkourRL
                 bestDistanceToGoal = currentDistance;
             }
 
-            // -- Bonus por estar na frente --
-            // A cada 100 steps, verifica ranking
+            // -- Bonus por estar na frente (Removido para o modo de teste simultâneo puro) --
+            // A cada 100 steps, verifica ranking (apenas comentado)
+            /*
             if (StepCount > 0 && StepCount % 100 == 0)
             {
                 float rank = GetCurrentRanking(); // 0=ultimo, 1=primeiro
                 if (rank > 0.7f) AddReward(0.5f);  // Liderando
                 else if (rank < 0.3f) AddReward(-0.2f); // Perdendo
             }
+            */
 
             previousDistanceToGoal = currentDistance;
             previousPosition = currentPos;
@@ -344,11 +346,7 @@ namespace ParkourRL
 
         public void OnRivalFinished(MarioCompetitiveAgent rival)
         {
-            // Rival chegou primeiro -- penalidade leve
-            if (!hasFinished)
-            {
-                AddReward(-1.0f);
-            }
+            // Rival chegou primeiro -- sem penalidade no modo simultâneo
         }
 
         public void SetGoal(Transform g) { targetGoal = g; }
@@ -374,20 +372,11 @@ namespace ParkourRL
                     bestCompletionTime = episodeTime;
                 }
 
-                // Bonus por ranking (primeiro ganha muito mais)
+                // Bonus por ranking (Apenas registramos a vitória, sem bônus massivos para evitar competição direta por pontos)
                 if (competitiveEnv != null)
                 {
                     ranking = competitiveEnv.RegisterFinish(this);
-                    float rankBonus = 0f;
-                    switch (ranking)
-                    {
-                        case 1: rankBonus = 30.0f; break; // Primeiro lugar
-                        case 2: rankBonus = 15.0f; break; // Segundo
-                        case 3: rankBonus = 5.0f;  break; // Terceiro
-                        default: rankBonus = 1.0f; break;  // Completou
-                    }
-                    AddReward(rankBonus);
-                    Debug.Log($"[Mario T{teamId}] GOAL! Posicao #{ranking} | Tempo: {episodeTime:F1}s | RankBonus: +{rankBonus:F0}");
+                    Debug.Log($"[Mario T{teamId}] GOAL! Posicao #{ranking} | Tempo: {episodeTime:F1}s");
                 }
 
                 AddReward(50f + timeBonus + recordBonus);
