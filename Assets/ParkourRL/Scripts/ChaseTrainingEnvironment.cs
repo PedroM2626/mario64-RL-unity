@@ -150,12 +150,16 @@ namespace ParkourRL
             if (pursuer != null)
             {
                 pursuer.gameObject.SetActive(true);
-                pursuer.transform.SetPositionAndRotation(pursuerSpawnPos, Quaternion.identity);
+                SM64Mario sm64 = pursuer.GetComponent<SM64Mario>();
+                if (sm64 != null) sm64.Teleport(pursuerSpawnPos);
+                else pursuer.transform.position = pursuerSpawnPos;
             }
             if (fugitive != null)
             {
                 fugitive.gameObject.SetActive(true);
-                fugitive.transform.SetPositionAndRotation(fugitiveSpawnPos, Quaternion.identity);
+                SM64Mario sm64 = fugitive.GetComponent<SM64Mario>();
+                if (sm64 != null) sm64.Teleport(fugitiveSpawnPos);
+                else fugitive.transform.position = fugitiveSpawnPos;
             }
 
             if (pursuer != null && fugitive != null)
