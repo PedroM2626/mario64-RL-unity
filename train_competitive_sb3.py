@@ -142,7 +142,8 @@ def main():
             sac = SAC("MlpPolicy", env_ppo_sac, buffer_size=50000, batch_size=256, learning_starts=1000, device="auto", tensorboard_log=args.tb_logdir)
             dqn = DQN("MlpPolicy", env_dqn, buffer_size=50000, batch_size=128, learning_starts=1000, exploration_fraction=0.2, device="auto", tensorboard_log=args.tb_logdir)
         
-        # Configurar logger para SAC e DQN (necessario para train())
+        # Configurar logger para PPO, SAC e DQN (necessario para train())
+        ppo.set_logger(Logger(folder=None, output_formats=["stdout"]))
         sac.set_logger(Logger(folder=None, output_formats=["stdout"]))
         dqn.set_logger(Logger(folder=None, output_formats=["stdout"]))
 
