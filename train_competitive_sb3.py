@@ -192,7 +192,7 @@ def main():
                     
                     if "PPO" in name:
                         with torch.no_grad():
-                            obs_t = torch.tensor(obs).unsqueeze(0).to(ppo.device)
+                            obs_t = torch.tensor(obs, dtype=torch.float32).unsqueeze(0).to(ppo.device)
                             action, value, log_prob = ppo.policy.forward(obs_t)
                         act_np = action.cpu().numpy()[0]
                         # Manter tensores para o buffer, mas numpy para envio
@@ -249,8 +249,8 @@ def main():
                         ppo.rollout_buffer.add(old_obs, act_np, reward, done, value_t, log_prob_t)
                         if ppo.rollout_buffer.full:
                             with torch.no_grad():
-                                next_obs_t = torch.tensor(next_obs).unsqueeze(0).to(ppo.device)
-                                last_value = ppo.policy.predict_values(next_obs_t).cpu().numpy()[0]
+                                next_obs_t = torch.tensor(next_obs, dtype=torch.float32).unsqueeze(0).to(ppo.device)
+                                last_value = ppo.policy.predict_values(next_obs_t).flatten()
                             ppo.rollout_buffer.compute_returns_and_advantage(last_values=last_value, dones=np.array([done]))
                             ppo.train()
                             ppo.rollout_buffer.reset()
