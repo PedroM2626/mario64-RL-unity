@@ -1,0 +1,30 @@
+{
+    "MarioTeamBattle": {
+        "elo": 1285.8417417880019,
+        "checkpoints": [
+            {
+                "steps": 170762,
+                "file_path": "results\\mario_team_battle_v1\\MarioTeamBattle\\MarioTeamBattle-170762.onnx",
+                "reward": null,
+                "creation_time": 1777169957.2194123,
+                "auxillary_file_paths": [
+                    "results\\mario_team_battle_v1\\MarioTeamBattle\\MarioTeamBattle-170762.pt"
+                ]
+            }
+        ],
+        "final_checkpoint": {
+            "steps": 170762,
+            "file_path": "results\\mario_team_battle_v1\\MarioTeamBattle.onnx",
+            "reward": null,
+            "creation_time": 1777169957.2194123,
+            "auxillary_file_paths": [
+                "results\\mario_team_battle_v1\\MarioTeamBattle\\MarioTeamBattle-170762.pt"
+            ]
+        }
+    },
+    "metadata": {
+        "stats_format_version": "0.3.0",
+        "mlagents_version": "0.28.0",
+        "torch_version": "2.4.1+cpu"
+    }
+}

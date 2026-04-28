@@ -48,6 +48,14 @@ namespace ParkourRL
         private const float MAX_EPISODE_TIME = 45f; // Mais tempo para competicao
         private RaycastHit[] raycastHitsCache = new RaycastHit[1];
 
+        // Fallback: detecta se OnActionReceived nunca foi chamado (sem trainer)
+        private bool actionReceivedThisEpisode = false;
+        private float timeSinceEpisodeStart = 0f;
+        private const float TRAINER_GRACE_PERIOD = 1.0f; // segundos para esperar trainer
+        private bool usingFallbackActions = false;
+        private float randomActionTimer = 0f;
+        private const float RANDOM_ACTION_INTERVAL = 0.3f;
+
         // Referencia a outros agentes no mesmo ambiente
         private List<MarioCompetitiveAgent> rivals = new List<MarioCompetitiveAgent>();
 
@@ -57,11 +65,32 @@ namespace ParkourRL
                 marioComponent = GetComponent<SM64Mario>();
             bestCompletionTime = MAX_EPISODE_TIME;
         }
+        
+        new void OnEnable()
+        {
+            base.OnEnable();
+            Debug.Log($"[{name}] OnEnable chamado - BehaviorParameters: {GetComponent<Unity.MLAgents.Policies.BehaviorParameters>() != null}");
+        }
+        
+        new void OnDisable()
+        {
+            base.OnDisable();
+            Debug.Log($"[{name}] OnDisable chamado");
+        }
 
         public override void Initialize()
         {
             base.Initialize();
             ResetInputs();
+            
+            // Garantir que o BehaviorParameters tenha o tamanho de observacao correto (42)
+            var bp = GetComponent<Unity.MLAgents.Policies.BehaviorParameters>();
+            if (bp != null && bp.BrainParameters.VectorObservationSize != 42)
+            {
+                bp.BrainParameters.VectorObservationSize = 42;
+                Debug.Log($"[{name}] VectorObservationSize corrigido para 42");
+            }
+            Debug.Log($"[{name}] Initialize concluido. BehaviorName: {(bp != null ? bp.BehaviorName : "null")}");
         }
 
         public override void OnEpisodeBegin()
@@ -69,6 +98,10 @@ namespace ParkourRL
             ResetInputs();
             hasFinished = false;
             ranking = 0;
+            actionReceivedThisEpisode = false;
+            timeSinceEpisodeStart = 0f;
+            usingFallbackActions = false;
+            randomActionTimer = 0f;
 
             if (competitiveEnv != null)
             {
@@ -213,9 +246,28 @@ namespace ParkourRL
             // Total: 3 + 4 + 3 + 1 + 16 + 1 + 1 + 1 + 12 = 42
         }
 
+        private float lastActionLogTime = 0f;
+        private bool firstActionReceived = false;
+        
         public override void OnActionReceived(ActionBuffers actions)
         {
             if (hasFinished) return;
+            
+            actionReceivedThisEpisode = true;
+            
+            // Se estava usando fallback, desativar
+            if (usingFallbackActions)
+            {
+                usingFallbackActions = false;
+                Debug.Log($"[{name}] Trainer conectado! Desativando fallback.");
+            }
+            
+            // Log na primeira vez que recebe acao
+            if (!firstActionReceived)
+            {
+                Debug.Log($"[{name}] PRIMEIRA ACAO RECEBIDA! Continuous: [{actions.ContinuousActions[0]:F2}, {actions.ContinuousActions[1]:F2}], Discrete: [{actions.DiscreteActions[0]}, {actions.DiscreteActions[1]}, {actions.DiscreteActions[2]}]");
+                firstActionReceived = true;
+            }
 
             // Acoes continuas: joystick
             joystickInput = new Vector2(
@@ -227,6 +279,13 @@ namespace ParkourRL
             jumpPressed = actions.DiscreteActions[0] == 1;
             kickPressed = actions.DiscreteActions[1] == 1;
             stompPressed = actions.DiscreteActions[2] == 1;
+            
+            // Log a cada 2 segundos para debug
+            if (Time.time - lastActionLogTime > 2f)
+            {
+                Debug.Log($"[ActionDebug] {name}: Joystick={joystickInput}, Jump={jumpPressed}, Kick={kickPressed}, Stomp={stompPressed}");
+                lastActionLogTime = Time.time;
+            }
 
             // Camera aponta para o goal
             if (targetGoal != null)
@@ -315,6 +374,107 @@ namespace ParkourRL
             if (GetComponent<MarioInputProvider>() == null)
             {
                 gameObject.AddComponent<MarioInputProvider>();
+            }
+        }
+
+        void FixedUpdate()
+        {
+            timeSinceEpisodeStart += Time.fixedDeltaTime;
+
+            // Se apos o periodo de graca, OnActionReceived nunca foi chamado,
+            // ativar acoes de fallback (exploracao aleatoria)
+            if (!actionReceivedThisEpisode && timeSinceEpisodeStart > TRAINER_GRACE_PERIOD && !usingFallbackActions)
+            {
+                usingFallbackActions = true;
+                Debug.Log($"[{name}] Nenhum trainer detectado apos {TRAINER_GRACE_PERIOD}s. Ativando acoes de exploracao aleatoria.");
+            }
+
+            if (usingFallbackActions && !hasFinished)
+            {
+                randomActionTimer += Time.fixedDeltaTime;
+                if (randomActionTimer >= RANDOM_ACTION_INTERVAL)
+                {
+                    randomActionTimer = 0f;
+                    GenerateRandomActions();
+                }
+
+                // Aplicar recompensas e logica de episodio manualmente,
+                // pois OnActionReceived nao esta sendo chamado
+                ApplyEpisodeLogic();
+            }
+        }
+
+        private void GenerateRandomActions()
+        {
+            // Gerar acoes aleatorias para exploracao
+            joystickInput = new Vector2(
+                Random.Range(-1f, 1f),
+                Random.Range(-1f, 1f)
+            );
+
+            // 30% chance de pulo, 10% kick, 10% stomp
+            jumpPressed = Random.value < 0.3f;
+            kickPressed = Random.value < 0.1f;
+            stompPressed = Random.value < 0.1f;
+
+            // Camera aponta para o goal
+            if (targetGoal != null)
+            {
+                cameraLookDirection = (targetGoal.position - transform.position).normalized;
+                cameraLookDirection.y = 0;
+                if (cameraLookDirection.sqrMagnitude < 0.01f)
+                    cameraLookDirection = Vector3.forward;
+            }
+        }
+
+        private void ApplyEpisodeLogic()
+        {
+            episodeTime += Time.fixedDeltaTime;
+            Vector3 currentPos = transform.position;
+            float currentDistance = GetDistanceToGoal();
+
+            // -- Penalidade por inatividade --
+            float moveDelta = Vector3.Distance(currentPos, previousPosition);
+            float stepPenalty = (moveDelta < 0.05f) ? -0.015f : -0.003f;
+            AddReward(stepPenalty);
+
+            // -- Recompensa por progresso --
+            float distanceDelta = previousDistanceToGoal - currentDistance;
+            if (distanceDelta > 0.01f)
+            {
+                AddReward(distanceDelta * 3.0f);
+            }
+            else if (distanceDelta < -0.01f)
+            {
+                AddReward(distanceDelta * 0.3f);
+            }
+
+            // -- Marco de distancia --
+            if (currentDistance < bestDistanceToGoal - 1.0f)
+            {
+                AddReward(5.0f);
+                bestDistanceToGoal = currentDistance;
+            }
+
+            previousDistanceToGoal = currentDistance;
+            previousPosition = currentPos;
+
+            // -- Morte por queda --
+            if (currentPos.y < startPosition.y - 3.0f)
+            {
+                float progressRatio = 1.0f - (currentDistance / Mathf.Max(initialDistanceToGoal, 0.1f));
+                AddReward(-2.0f + progressRatio * 1.0f);
+                EndEpisode();
+                return;
+            }
+
+            // -- Timeout --
+            if (episodeTime >= MAX_EPISODE_TIME)
+            {
+                float progressRatio = 1.0f - (currentDistance / Mathf.Max(initialDistanceToGoal, 0.1f));
+                AddReward(-8.0f + progressRatio * 3.0f);
+                EndEpisode();
+                return;
             }
         }
 

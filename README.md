@@ -2,12 +2,13 @@
 
 Sistema completo para treinar agentes de IA em ambientes de parkour do Super Mario 64 usando **Reinforcement Learning**, **Imitation Learning** e **Offline RL**.
 
-## Novidades: Parkour Simultâneo (PPO, SAC, DQN)
-O projeto agora suporta o teste e treinamento simultâneo de 3 algoritmos no mesmo ambiente de parkour. Nenhum agente perde pontos para o outro, eles disputam de forma pura quem termina o percurso primeiro e o domina.
+## Novidades: CompetitiveParkour (PPO, SAC, DQN)
+O projeto agora suporta o treinamento simultaneo de 3 algoritmos distintos no mesmo ambiente de parkour. Nenhum agente perde pontos para o outro; eles disputam puramente quem chega ao goal primeiro.
 - **Mario PPO (Vermelho)**
 - **Mario SAC (Azul)**
-- **Mario DQN/PPO-variant (Verde)**
-Inclui também um placar na tela (UI) registrando as vitórias de cada modelo e integração total com MLOps (via MLflow) para registrar automaticamente os modelos, parâmetros e métricas.
+- **Mario DQN (Verde)**
+
+O ambiente `CompetitiveParkour` e um environment dedicado (nao reutiliza o parkour antigo), sem parallel training. As cores e texturas de cada Mario sao configuraveis diretamente no Inspector do `CompetitiveParkourEnvironment`. Um HUD na tela mostra o placar de vitorias de cada modelo em tempo real. O treinamento e feito via `train_competitive_sb3.py` com TensorBoard e integracao MLOps (MLflow).
 
 ---
 
@@ -112,6 +113,7 @@ libsm64-unity-dev/
 ├── results/                                        [Modelos treinados]
 ├── train_hybrid.ps1                                [Script treinamento]
 ├── train_mario.ps1
+├── train_competitive_sb3.py                        [Treino SB3 competitivo c/ TensorBoard]
 ├── trainer_mlflow.py                               [MLOps]
 ├── requirements.txt
 ├── Dockerfile
@@ -249,13 +251,38 @@ mlagents-learn Assets/ParkourRL/Config/mario_parkour_hybrid.yaml \
 
 ---
 
-### 3. **Modo Competitivo**
+### 3. **Modo Competitivo (CompetitiveParkour)**
 
-Dois agentes compete para chegar ao goal primeiro.
+Tres modelos (PPO, SAC, DQN) competem simultaneamente para chegar ao goal primeiro. O ambiente e dedicado (nao reutiliza o parkour antigo) e nao usa parallel training.
 
 - Cena: `CompetitiveParkour.unity`
 - Script: `CompetitiveParkourEnvironment.cs`
 - Agente: `MarioCompetitiveAgent.cs`
+
+**Caracteristicas:**
+- 3 Spawn Points configuraveis no Inspector
+- Cores e texturas customizadas por modelo (expostas no Inspector: `ppoColor`, `sacColor`, `dqnColor`)
+- HUD de vitorias na tela (UI) com contagem por modelo
+- Materiais runtime gerados automaticamente com base na cor configurada
+
+**Observacoes (42-dim):**
+| Campo | Indices | Valores |
+|-------|---------|---------|
+| Posicao (x,y,z) | 0-2 | [-1, 1] |
+| Direcao ao goal (x,y,z,dist) | 3-6 | [-1, 1] |
+| Velocidade (x,y,z) | 7-9 | [-1, 1] |
+| No ar? | 10 | {0, 1} |
+| Raycasts 8 direcoes | 11-26 | [0, 1] |
+| Raycast para baixo | 27 | [0, 1] |
+| Tempo / 45s | 28 | [0, 1] |
+| Ranking relativo | 29 | [0, 1] |
+| Rivais (3x4 obs) | 30-41 | [-1, 1] |
+
+**Actions:**
+- `[0-1]` Joystick X/Y: [-1, 1] (continuo)
+- `[2]` Pular: {0, 1} (discreto)
+- `[3]` Chute/Soco: {0, 1} (discreto)
+- `[4]` Rasteira/Stomp: {0, 1} (discreto)
 
 ---
 
@@ -276,7 +303,7 @@ Dois times de agentes cooperam/competem.
 | **ParkourTraining.unity** | RL Padrão | 4 Marios paralelos | ✅ Sim |
 | **ParkourTraining_OldSystem.unity** | Sistema antigo | Backup | ❌ Não |
 | **HybridTraining.unity** | IL + Offline RL | Recording mode | ✅ Sim |
-| **CompetitiveParkour.unity** | Competição 1v1 | 2 Agentes | ✅ Sim |
+| **CompetitiveParkour.unity** | Competicao 3 modelos | 1 PPO + 1 SAC + 1 DQN | ❌ Nao |
 | **TeamBattle.unity** | Team 2v2 | 4 Agentes | ✅ Sim |
 | **ChaseTraining.unity** | Perseguição 1v1 (SAC) | 2 Agentes (Pursuer + Fugitive) | ✅ Sim |
 
@@ -303,25 +330,37 @@ mlagents-learn Assets/ParkourRL/Config/mario_parkour.yaml --run-id parkour_v1
 
 ---
 
-### Treinamento MLOps (Parkour Simultâneo)
+### Treinamento CompetitiveParkour (SB3 + TensorBoard + MLOps)
 
-Para utilizar o pipeline de MLOps no modo de parkour simultâneo:
+Treinamento simultaneo de PPO, SAC e DQN usando Stable-Baselines3 diretamente, com logs no TensorBoard e rastreamento MLflow.
 
 ```powershell
-# 1. Instalar dependências (inclui MLflow, ML-Agents e Torch)
+# 1. Instalar dependencias
 pip install -r requirements.txt
 
-# 2. Rodar o treinamento com registro automático
-python train_mlops.py --config Assets/ParkourRL/Config/mario_parkour.yaml
+# 2. No Unity, abra a cena CompetitiveParkour.unity e de Play
 
-# 3. No Unity, abra a cena CompetitiveParkour.unity e dê Play
-# Os 3 Marios (PPO, SAC, DQN) começarão a correr no parkour juntos.
+# 3. Rodar o treinamento com TensorBoard e MLflow
+python train_competitive_sb3.py --time-scale 3.0 --tb-logdir ./tensorboard_logs
 
-# 4. Acompanhar métricas e modelos gerados:
+# 4. Acompanhar metricas em tempo real (TensorBoard)
+tensorboard --logdir ./tensorboard_logs
+# Acesse no navegador: http://localhost:6006
+
+# 5. Acompanhar modelos e parametros (MLflow)
 mlflow ui
 # Acesse no navegador: http://localhost:5000
 ```
-O script `train_mlops.py` registrará a run, o YAML configurado, parâmetros de cada modelo e, ao fim, todos os `.onnx` exportados. Também existe um `Dockerfile` caso prefira containerizar o ambiente Python.
+
+**Argumentos do script:**
+- `--env`: Caminho do executavel Unity (deixe vazio para Editor)
+- `--run-id`: ID da run (default: timestamp)
+- `--resume`: Retomar de checkpoints salvos
+- `--force`: Sobrescrever runs anteriores
+- `--tb-logdir`: Diretorio dos logs do TensorBoard (default: `./tensorboard_logs`)
+- `--time-scale`: Time scale da Unity (default: `3.0`)
+
+O script `train_competitive_sb3.py` cria um `CompetitiveParkourEnv` (gym.Env) dedicado a esta cena, sem reutilizar o ambiente do parkour antigo. Ele registra no MLflow: recompensa por episodio, comprimento do episodio, checkpoints a cada 50 episodios e modelos finais em ONNX.
 
 ---
 

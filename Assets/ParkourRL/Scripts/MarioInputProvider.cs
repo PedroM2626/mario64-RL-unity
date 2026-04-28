@@ -94,20 +94,26 @@ namespace ParkourRL
             return Vector3.forward;
         }
 
+        private float lastLogTime = 0f;
+        
         public override Vector2 GetJoystickAxes()
         {
             FindAgents();
+            Vector2 result = Vector2.zero;
             if (agent != null)
-                return agent.joystickInput;
-            if (competitiveAgent != null)
-                return competitiveAgent.joystickInput;
-            if (teamBattleAgent != null)
-                return teamBattleAgent.joystickInput;
-            if (chaseAgent != null)
-                return chaseAgent.joystickInput;
-            if (backupAgent != null)
-                return ReadBackupVector2("joystickInput");
-            return Vector2.zero;
+                result = agent.joystickInput;
+            else if (competitiveAgent != null)
+                result = competitiveAgent.joystickInput;
+            
+            // Log a cada 10 segundos para debug (somente quando ha input significativo)
+            if (Time.time - lastLogTime > 10f)
+            {
+                string agentName = competitiveAgent != null ? competitiveAgent.name : (agent != null ? agent.name : "null");
+                Debug.Log($"[InputDebug] Joystick: {result}, Agent: {agentName}");
+                lastLogTime = Time.time;
+            }
+            
+            return result;
         }
 
         public override bool GetButtonHeld(Button button)

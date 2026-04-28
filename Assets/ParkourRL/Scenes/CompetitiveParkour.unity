@@ -165,7 +165,7 @@ Light:
   serializedVersion: 10
   m_Type: 1
   m_Shape: 0
-  m_Color: {r: 1, g: 0.96, b: 0.9, a: 1}
+  m_Color: {r: 0.9496855, g: 0, b: 0.23251751, a: 1}
   m_Intensity: 1.2
   m_Range: 10
   m_SpotAngle: 30
@@ -938,7 +938,7 @@ Transform:
   m_GameObject: {fileID: 100000070}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 3.05, z: 0}
+  m_LocalPosition: {x: -0.77, y: 2, z: -1.21}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1084,20 +1084,83 @@ MonoBehaviour:
   m_GameObject: {fileID: 100000100}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8f2d3a1b4c5e6d7f8091a2b3c4d5e6f7, type: 3}
+  m_Script: {fileID: 11500000, guid: 9424ef1b92e56574a982e4f7e612af05, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  baseMarioMaterial: {fileID: 2100000, guid: db0929541b7d4e749826b59a52ac58e3, type: 2}
   marioPrefab: {fileID: 2518639426973004745, guid: 8772da6d9ed00381fb7365a5f1b52114,
     type: 3}
-  marioSpawnPoint: {fileID: 100000071}
-  marioMaterial: {fileID: 2100000, guid: db0929541b7d4e749826b59a52ac58e3, type: 2}
-  startupMode: 0
+  ppoColor: {r: 1, g: 0.2, b: 0.2, a: 1}
+  sacColor: {r: 0.2, g: 0.4, b: 1, a: 1}
+  dqnColor: {r: 0.2, g: 0.9, b: 0.2, a: 1}
+  spawnPoints:
+  - {fileID: 100000071}
+  - {fileID: 200000071}
+  - {fileID: 300000071}
   goal: {fileID: 100000081}
-  checkpoints: []
-  platformSpawnPoints: []
-  platformPrefabs: []
-  parallelEnvironments: 4
-  environmentSpacing: 30
+  marioCount: 3
+--- !u!1 &200000070
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 200000071}
+  m_Layer: 0
+  m_Name: SpawnPoint2
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &200000071
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 200000070}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -0.49, y: 2, z: 0.09}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &300000070
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 300000071}
+  m_Layer: 0
+  m_Name: SpawnPoint3
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &300000071
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 300000070}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -0.52, y: 2, z: 1.41}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &538583456
 GameObject:
   m_ObjectHideFlags: 0
@@ -1231,7 +1294,9 @@ SceneRoots:
   - {fileID: 100000041}
   - {fileID: 100000051}
   - {fileID: 100000061}
-  - {fileID: 100000071}
   - {fileID: 100000081}
   - {fileID: 100000091}
   - {fileID: 100000101}
+  - {fileID: 100000071}
+  - {fileID: 200000071}
+  - {fileID: 300000071}

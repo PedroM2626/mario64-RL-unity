@@ -1,0 +1,50 @@
+{
+    "spawn_lesson": {
+        "lesson_num": 0
+    },
+    "MarioParkour": {
+        "checkpoints": [
+            {
+                "steps": 199977,
+                "file_path": "results\\marioV2\\MarioParkour\\MarioParkour-199977.onnx",
+                "reward": 21.19867251136086,
+                "creation_time": 1777076506.918627,
+                "auxillary_file_paths": [
+                    "results\\marioV2\\MarioParkour\\MarioParkour-199977.pt"
+                ]
+            },
+            {
+                "steps": 399972,
+                "file_path": "results\\marioV2\\MarioParkour\\MarioParkour-399972.onnx",
+                "reward": 20.075808942317963,
+                "creation_time": 1777077646.2838254,
+                "auxillary_file_paths": [
+                    "results\\marioV2\\MarioParkour\\MarioParkour-399972.pt"
+                ]
+            },
+            {
+                "steps": 560310,
+                "file_path": "results\\marioV2\\MarioParkour\\MarioParkour-560310.onnx",
+                "reward": 9.579216873645782,
+                "creation_time": 1777078565.9424806,
+                "auxillary_file_paths": [
+                    "results\\marioV2\\MarioParkour\\MarioParkour-560310.pt"
+                ]
+            }
+        ],
+        "final_checkpoint": {
+            "steps": 560310,
+            "file_path": "results\\marioV2\\MarioParkour.onnx",
+            "reward": 9.579216873645782,
+            "creation_time": 1777078565.9424806,
+            "auxillary_file_paths": [
+                "results\\marioV2\\MarioParkour\\MarioParkour-560310.pt"
+            ]
+        }
+    },
+    "metadata": {
+        "stats_format_version": "0.3.0",
+        "mlagents_version": "0.28.0",
+        "torch_version": "2.4.1+cpu"
+    }
+}

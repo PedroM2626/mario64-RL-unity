@@ -1,0 +1,65 @@
+{
+    "MarioParkour_Old": {
+        "checkpoints": [
+            {
+                "steps": 399966,
+                "file_path": "results\\marioV1\\MarioParkour_Old\\MarioParkour_Old-399966.onnx",
+                "reward": -1.5466888217964871,
+                "creation_time": 1777054000.130877,
+                "auxillary_file_paths": [
+                    "results\\marioV1\\MarioParkour_Old\\MarioParkour_Old-399966.pt"
+                ]
+            },
+            {
+                "steps": 599999,
+                "file_path": "results\\marioV1\\MarioParkour_Old\\MarioParkour_Old-599999.onnx",
+                "reward": -1.6072413577737406,
+                "creation_time": 1777055372.745392,
+                "auxillary_file_paths": [
+                    "results\\marioV1\\MarioParkour_Old\\MarioParkour_Old-599999.pt"
+                ]
+            },
+            {
+                "steps": 799998,
+                "file_path": "results\\marioV1\\MarioParkour_Old\\MarioParkour_Old-799998.onnx",
+                "reward": -1.639519325980927,
+                "creation_time": 1777056731.880256,
+                "auxillary_file_paths": [
+                    "results\\marioV1\\MarioParkour_Old\\MarioParkour_Old-799998.pt"
+                ]
+            },
+            {
+                "steps": 999976,
+                "file_path": "results\\marioV1\\MarioParkour_Old\\MarioParkour_Old-999976.onnx",
+                "reward": -1.329252583929833,
+                "creation_time": 1777058086.3121943,
+                "auxillary_file_paths": [
+                    "results\\marioV1\\MarioParkour_Old\\MarioParkour_Old-999976.pt"
+                ]
+            },
+            {
+                "steps": 1038028,
+                "file_path": "results\\marioV1\\MarioParkour_Old\\MarioParkour_Old-1038028.onnx",
+                "reward": 27.199736613147664,
+                "creation_time": 1777058383.8508673,
+                "auxillary_file_paths": [
+                    "results\\marioV1\\MarioParkour_Old\\MarioParkour_Old-1038028.pt"
+                ]
+            }
+        ],
+        "final_checkpoint": {
+            "steps": 1038028,
+            "file_path": "results\\marioV1\\MarioParkour_Old.onnx",
+            "reward": 27.199736613147664,
+            "creation_time": 1777058383.8508673,
+            "auxillary_file_paths": [
+                "results\\marioV1\\MarioParkour_Old\\MarioParkour_Old-1038028.pt"
+            ]
+        }
+    },
+    "metadata": {
+        "stats_format_version": "0.3.0",
+        "mlagents_version": "0.28.0",
+        "torch_version": "2.4.1+cpu"
+    }
+}

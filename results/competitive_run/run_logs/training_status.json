@@ -1,0 +1,76 @@
+{
+    "spawn_lesson": {
+        "lesson_num": 0
+    },
+    "MarioParkourPPO": {
+        "checkpoints": [
+            {
+                "steps": 4992,
+                "file_path": "results\\competitive_run\\MarioParkourPPO\\MarioParkourPPO-4992.onnx",
+                "reward": null,
+                "creation_time": 1777416467.4193265,
+                "auxillary_file_paths": [
+                    "results\\competitive_run\\MarioParkourPPO\\MarioParkourPPO-4992.pt"
+                ]
+            }
+        ],
+        "final_checkpoint": {
+            "steps": 4992,
+            "file_path": "results\\competitive_run\\MarioParkourPPO.onnx",
+            "reward": null,
+            "creation_time": 1777416467.4193265,
+            "auxillary_file_paths": [
+                "results\\competitive_run\\MarioParkourPPO\\MarioParkourPPO-4992.pt"
+            ]
+        }
+    },
+    "MarioParkourSAC": {
+        "checkpoints": [
+            {
+                "steps": 4992,
+                "file_path": "results\\competitive_run\\MarioParkourSAC\\MarioParkourSAC-4992.onnx",
+                "reward": null,
+                "creation_time": 1777416467.465495,
+                "auxillary_file_paths": [
+                    "results\\competitive_run\\MarioParkourSAC\\MarioParkourSAC-4992.pt"
+                ]
+            }
+        ],
+        "final_checkpoint": {
+            "steps": 4992,
+            "file_path": "results\\competitive_run\\MarioParkourSAC.onnx",
+            "reward": null,
+            "creation_time": 1777416467.465495,
+            "auxillary_file_paths": [
+                "results\\competitive_run\\MarioParkourSAC\\MarioParkourSAC-4992.pt"
+            ]
+        }
+    },
+    "MarioParkourDQN": {
+        "checkpoints": [
+            {
+                "steps": 4992,
+                "file_path": "results\\competitive_run\\MarioParkourDQN\\MarioParkourDQN-4992.onnx",
+                "reward": null,
+                "creation_time": 1777416467.4991815,
+                "auxillary_file_paths": [
+                    "results\\competitive_run\\MarioParkourDQN\\MarioParkourDQN-4992.pt"
+                ]
+            }
+        ],
+        "final_checkpoint": {
+            "steps": 4992,
+            "file_path": "results\\competitive_run\\MarioParkourDQN.onnx",
+            "reward": null,
+            "creation_time": 1777416467.4991815,
+            "auxillary_file_paths": [
+                "results\\competitive_run\\MarioParkourDQN\\MarioParkourDQN-4992.pt"
+            ]
+        }
+    },
+    "metadata": {
+        "stats_format_version": "0.3.0",
+        "mlagents_version": "0.28.0",
+        "torch_version": "2.4.1+cpu"
+    }
+}
