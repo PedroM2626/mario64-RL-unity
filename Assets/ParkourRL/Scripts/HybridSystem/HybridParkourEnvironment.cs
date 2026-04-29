@@ -5,8 +5,8 @@ using LibSM64;
 namespace ParkourRL.HybridSystem
 {
     /// <summary>
-    /// Ambiente híbrido: gerencia dois Marios lado a lado.
-    /// Um é player-controlled (para gravação/IL), outro é AI (para treino).
+    /// Hybrid environment: manages two Marios side by side.
+    /// One is player-controlled (for recording/IL), the other is AI (for training).
     /// Ambos tentam completar o mesmo parkour sem competir entre si.
     /// </summary>
     public class HybridParkourEnvironment : MonoBehaviour
@@ -20,23 +20,23 @@ namespace ParkourRL.HybridSystem
         [SerializeField] private Transform goal;
         [SerializeField] private Transform playerSpawnPoint;
         [SerializeField] private Transform aiSpawnPoint;
-        [SerializeField] private Transform[] sharedSpawnPoints;  // Fallback se os específicos não estiverem definidos
+        [SerializeField] private Transform[] sharedSpawnPoints;  // Fallback if specific ones are not defined
 
         [Header("Hybrid Settings")]
-        [Tooltip("Distância entre os dois Marios (eixo X)")]
+        [Tooltip("Distance between the two Marios (X axis)")]
         [SerializeField] private float marioSpacing = 15f;
         
         [Tooltip("Sincronizar resets (quando um morre, ambos reiniciam)")]
         [SerializeField] private bool syncResets = true;
         
-        [Tooltip("Mostrar UI de comparação")]
+        [Tooltip("Show comparison UI")]
         [SerializeField] private bool showComparisonUI = true;
 
         [Header("Recording Components")]
         [SerializeField] private HybridDataRecorder dataRecorder;
         [SerializeField] private HybridTrainingManager trainingManager;
 
-        // Referências aos Marios
+        // References to Marios
         private GameObject playerMario;
         private GameObject aiMario;
         private HybridPlayerMario playerController;
@@ -57,13 +57,13 @@ namespace ParkourRL.HybridSystem
             
             InitializeSpawnPoints();
             
-            // Aguardar inicialização
+            // Wait for initialization
             Invoke(nameof(SpawnBothMarios), 0.5f);
         }
 
         private void InitializeSpawnPoints()
         {
-            // Usar spawn points específicos ou calcular a partir do shared
+            // Usar spawn points specifics ou calcular a partir do shared
             if (playerSpawnPoint != null)
             {
                 currentPlayerSpawn = playerSpawnPoint.position;
@@ -163,7 +163,7 @@ namespace ParkourRL.HybridSystem
                     materialField.SetValue(sm64Mario, playerMat);
             }
             
-            // Câmera para o player
+            // Camera for the player
             GameObject camObj = new GameObject("PlayerCamera");
             Camera cam = camObj.AddComponent<Camera>();
             cam.rect = new Rect(0, 0, 0.5f, 1);  // Metade esquerda da tela
@@ -171,7 +171,7 @@ namespace ParkourRL.HybridSystem
             
             playerMario.SetActive(true);
             
-            // Conectar ao recorder se estiver em modo gravação
+            // Connect to recorder if in recording mode
             if (dataRecorder != null && trainingManager != null && 
                 trainingManager.CurrentMode == HybridTrainingManager.HybridMode.Recording)
             {
@@ -192,7 +192,7 @@ namespace ParkourRL.HybridSystem
             aiMario.SetActive(false);
             aiMario.transform.position = currentAISpawn + Vector3.up * 2f;
             
-            // Adicionar agente híbrido
+            // Add hybrid agent
             aiAgent = aiMario.AddComponent<MarioHybridAgent>();
             aiAgent.SetEnvironment(this);
             if (goal != null)
@@ -251,7 +251,7 @@ namespace ParkourRL.HybridSystem
             decisionRequester.DecisionPeriod = 2;
             decisionRequester.TakeActionsBetweenDecisions = true;
             
-            // Câmera para o AI (view-only)
+            // Camera for the AI (view-only)
             GameObject camObj = new GameObject("AICamera");
             Camera cam = camObj.AddComponent<Camera>();
             cam.rect = new Rect(0.5f, 0, 0.5f, 1);  // Metade direita da tela
@@ -269,7 +269,7 @@ namespace ParkourRL.HybridSystem
 
         public void ResetEnvironment()
         {
-            // Respawn de ambos - APENAS resetar posições, NÃO chamar EndEpisode/OnEpisodeBegin
+            // Respawn both - ONLY reset positions, DO NOT call EndEpisode/OnEpisodeBegin
             if (playerMario != null && playerController != null)
             {
                 playerController.ResetPlayer();
@@ -277,9 +277,9 @@ namespace ParkourRL.HybridSystem
             
             if (aiMario != null && aiAgent != null)
             {
-                // Apenas resetar a posição do agente IA
+                // Only reset the AI agent position
                 aiAgent.transform.position = GetCurrentSpawnPoint();
-                // NÃO chamar EndEpisode() aqui - causa recursão infinita!
+                // DO NOT call EndEpisode() here - causes infinite recursion!
             }
         }
 
@@ -330,7 +330,7 @@ namespace ParkourRL.HybridSystem
                 playerController.SetDataRecorder(dataRecorder);
             }
             
-            // Recriar Marios para aplicar mudanças
+            // Recreate Marios to apply changes
             ResetEnvironment();
         }
 
@@ -338,7 +338,7 @@ namespace ParkourRL.HybridSystem
         {
             if (!showComparisonUI) return;
             
-            // UI simples de comparação
+            // Simple comparison UI
             GUI.Box(new Rect(10, 10, 250, 120), "Hybrid Training Stats");
             
             GUI.Label(new Rect(20, 35, 230, 20), $"Player (Green): {playerCompletedCount} completes");
@@ -347,7 +347,7 @@ namespace ParkourRL.HybridSystem
             GUI.Label(new Rect(20, 80, 230, 20), $"AI (Blue): {aiCompletedCount} completes");
             GUI.Label(new Rect(20, 100, 230, 20), $"AI Best: {(aiBestTime < 999 ? aiBestTime.ToString("F2") + "s" : "--")}");
             
-            // Modo atual
+            // Current mode
             string modeStr = trainingManager != null ? trainingManager.CurrentMode.ToString() : "Unknown";
             GUI.Label(new Rect(Screen.width - 150, 10, 140, 20), $"Mode: {modeStr}");
         }

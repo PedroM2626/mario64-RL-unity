@@ -5,8 +5,8 @@ using System.Collections.Generic;
 namespace ParkourRL.HybridSystem
 {
     /// <summary>
-    /// Mario controlado pelo player (teclado) para gravação de demos.
-    /// Grava transições para Imitation Learning e Offline RL.
+    /// Player-controlled Mario (keyboard) for recording demos.
+    /// Records transitions for Imitation Learning and Offline RL.
     /// </summary>
     public class HybridPlayerMario : MonoBehaviour
     {
@@ -16,13 +16,13 @@ namespace ParkourRL.HybridSystem
         [SerializeField] private string jumpButton = "Jump";
         
         [Header("Recording")]
-        [Tooltip("Intervalo entre gravações (segundos)")]
+        [Tooltip("Recording interval (seconds)")]
         [SerializeField] private float recordInterval = 0.05f;  // 20 FPS
         
-        [Tooltip("Número de observações a gravar")]
+        [Tooltip("Number of observations to record")]
         [SerializeField] private int observationCount = 30;
         
-        [Tooltip("Distância máxima para detectar goal")]
+        [Tooltip("Maximum distance to detect goal")]
         [SerializeField] private float goalDetectionRadius = 2f;
 
         // Componentes
@@ -46,7 +46,7 @@ namespace ParkourRL.HybridSystem
         private const int RAYCAST_COUNT = 8;
         private const float RAYCAST_DISTANCE = 10f;
 
-        // Estrutura de transição
+        // Transition structure
         public struct HybridTransition
         {
             public float[] observations;
@@ -80,7 +80,7 @@ namespace ParkourRL.HybridSystem
             episodeCompleted = false;
             currentTransitions.Clear();
             
-            Debug.Log("[HybridPlayer] Player Mario iniciado. Use WASD + Espaço.");
+            Debug.Log("[HybridPlayer] Player Mario started. Use WASD + Space.");
         }
 
         void Update()
@@ -91,7 +91,7 @@ namespace ParkourRL.HybridSystem
                 CheckGoalReached();
                 CheckFallDeath();
                 
-                // Gravar transição
+                // Record transition
                 if (isRecording && Time.time - lastRecordTime >= recordInterval)
                 {
                     RecordTransition();
@@ -136,7 +136,7 @@ namespace ParkourRL.HybridSystem
             {
                 dataRecorder.StartEpisode();
                 
-                // Converter e salvar todas as transições
+                // Convert and save all transitions
                 foreach (var trans in currentTransitions)
                 {
                     dataRecorder.RecordStep(
@@ -148,20 +148,20 @@ namespace ParkourRL.HybridSystem
                     );
                 }
                 
-                // Finalizar episódio no recorder
+                // Finalize episode in recorder
                 var dummyTransitions = new MarioHybridAgent.HybridTransition[0];
                 dataRecorder.SaveEpisode(dummyTransitions, success);
             }
             
-            // Notificar ambiente
+            // Notify environment
             if (environment != null)
             {
                 environment.OnPlayerReachedGoal(episodeTime);
             }
             
-            Debug.Log($"[HybridPlayer] Episódio terminado: {(success ? "SUCCESS" : "FAILED")} em {episodeTime:F2}s");
+            Debug.Log($"[HybridPlayer] Episode finished: {(success ? "SUCCESS" : "FAILED")} em {episodeTime:F2}s");
             
-            // Auto-reset após delay
+            // Auto-reset after delay
             Invoke(nameof(ResetPlayer), 2f);
         }
 
@@ -170,10 +170,10 @@ namespace ParkourRL.HybridSystem
             Vector3 position = transform.position;
             Vector3 velocity = (position - previousPosition) / Mathf.Max(Time.deltaTime, 0.001f);
             
-            // Coletar observações (mesmo formato do agente)
+            // Collect observations (same format as agent)
             float[] observations = CollectObservations();
             
-            // Coletar ações (input do player)
+            // Collect actions (player input)
             float[] actions = new float[]
             {
                 Input.GetAxis(horizontalAxis),
@@ -181,7 +181,7 @@ namespace ParkourRL.HybridSystem
                 Input.GetButton(jumpButton) ? 1f : 0f
             };
             
-            // Calcular reward (aproximação)
+            // Calculate reward (approximation)
             float reward = CalculateReward();
             
             var transition = new HybridTransition
@@ -213,12 +213,12 @@ namespace ParkourRL.HybridSystem
             Vector3 envOffset = environment != null ? environment.transform.position : Vector3.zero;
             Vector3 localPosition = position - envOffset;
             
-            // [3] Posição
+            // [3] Position
             obs[idx++] = localPosition.x / 25f;
             obs[idx++] = localPosition.y / 10f;
             obs[idx++] = localPosition.z / 25f;
             
-            // [4] Direção ao goal (placeholder - calcular de verdade seria melhor)
+            // [4] Direction to goal (placeholder - calcular de verdade seria melhor)
             obs[idx++] = 0f;
             obs[idx++] = 0f;
             obs[idx++] = 1f;
@@ -252,7 +252,7 @@ namespace ParkourRL.HybridSystem
                 }
             }
             
-            // [1] Altura do chão
+            // [1] Ground height
             if (Physics.RaycastNonAlloc(position + Vector3.up * 0.5f, Vector3.down, raycastHitsCache, 20f) > 0)
             {
                 obs[idx++] = raycastHitsCache[0].distance / 20f;
@@ -349,7 +349,7 @@ namespace ParkourRL.HybridSystem
             }
         }
         
-        // Simples follower de câmera
+        // Simple camera follower
         public class CameraFollower : MonoBehaviour
         {
             public Transform target;

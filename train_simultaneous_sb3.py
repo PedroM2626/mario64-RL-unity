@@ -16,9 +16,9 @@ import torch as th
 
 def export_onnx(model, path, is_dqn=False):
     """
-    Exporta o modelo SB3 para formato ONNX simples.
-    Unity ML-Agents pode não reconhecer 100% nativamente sem o version_number,
-    mas a estrutura base de inferência estará acessível.
+    Export the SB3 model to a simple ONNX format.
+    Unity ML-Agents may not fully recognize it natively without version_number,
+    but the base inference structure will be accessible.
     """
     class OnnxWrapper(th.nn.Module):
         def __init__(self, policy):
@@ -43,20 +43,20 @@ def export_onnx(model, path, is_dqn=False):
 
 class MockEnv(gym.Env):
     """
-    Um ambiente simulado (mock) puramente para inicializar a arquitetura das redes neurais do Stable-Baselines3.
-    Nós injetamos as transições manualmente nos buffers no loop principal.
+    A mock environment purely to initialize the Stable-Baselines3 neural network architecture.
+    We manually inject transitions into the buffers in the main loop.
     """
     def __init__(self, is_dqn=False):
         super().__init__()
-        # VectorObservationSize = 42 da Unity
+        # VectorObservationSize = 42 from Unity
         self.observation_space = spaces.Box(low=-10.0, high=10.0, shape=(42,), dtype=np.float32)
         
         if is_dqn:
-            # DQN DE VERDADE: O DQN exige espaço de ação estritamente discreto.
-            # Discretizamos o controle do Mario: 3 direções X, 3 direções Y, 2 de Pulo = 18 ações.
+            # True DQN: DQN requires a strictly discrete action space.
+            # We discretize Mario's control: 3 X directions, 3 Y directions, 2 Jump = 18 actions.
             self.action_space = spaces.Discrete(18)
         else:
-            # PPO e SAC suportam espaços contínuos. Box(5) -> 2 Joysticks + 3 Botões simulados como float.
+            # PPO and SAC support continuous spaces. Box(5) -> 2 Joysticks + 3 Buttons simulated as float.
             self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(5,), dtype=np.float32)
             
     def step(self, action):
@@ -66,7 +66,7 @@ class MockEnv(gym.Env):
         return np.zeros(42), {}
 
 def convert_dqn_action(act):
-    """ Mapeia uma das 18 ações discretas do DQN para ActionTuple da Unity """
+    """ Maps one of the 18 discrete DQN actions to a Unity ActionTuple """
     joy_x_map = [-1.0, 0.0, 1.0]
     joy_y_map = [-1.0, 0.0, 1.0]
     
@@ -81,7 +81,7 @@ def convert_dqn_action(act):
     return ActionTuple(continuous=cont, discrete=disc)
 
 def convert_box_action(act):
-    """ Converte saída Box do SAC e PPO para ActionTuple da Unity """
+    """ Converts Box output from SAC and PPO to Unity ActionTuple """
     cont = np.array([[act[0], act[1]]], dtype=np.float32)
     j = 1 if act[2] > 0 else 0
     k = 1 if act[3] > 0 else 0
@@ -91,13 +91,13 @@ def convert_box_action(act):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", type=str, default=None, help="Caminho do executavel (None para rodar via Play no Editor da Unity)")
+    parser.add_argument("--env", type=str, default=None, help="Path to Unity executable (None to run via Play in the Unity Editor)")
     parser.add_argument("--run-id", type=str, default=f"Parkour_SB3_TrueDQN_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
     parser.add_argument("--resume", action="store_true", help="Resume from checkpoint if exists")
     parser.add_argument("--force", action="store_true", help="Overwrite (ignore previous models)")
     args = parser.parse_args()
 
-    # MLOps: Inicializando Tracking
+    # MLOps: Initialize Tracking
     mlflow.set_tracking_uri("sqlite:///mlflow.db")
     mlflow.set_experiment("Mario_Parkour_TrueDQN_Simultaneous")
 
@@ -105,7 +105,7 @@ def main():
         print(f"[*] Started MLflow run: {run.info.run_id}")
         mlflow.log_param("Framework", "Stable-Baselines3 + Unity ML-Agents Bridge")
         
-        print("[*] Instanciando verdadeiros algoritmos no PyTorch...")
+        print("[*] Instantiating real algorithms in PyTorch...")
         mock_env_box = MockEnv(is_dqn=False)
         mock_env_dqn = MockEnv(is_dqn=True)
         
@@ -114,7 +114,7 @@ def main():
         dqn_path = f"models/{args.run_id}/MarioParkourDQN_model.zip"
         
         if args.resume and not args.force:
-            print("[*] Tentando restaurar checkpoints anteriores...")
+            print("[*] Attempting to restore previous checkpoints...")
             ppo = PPO.load(ppo_path, env=mock_env_box) if os.path.exists(ppo_path) else PPO("MlpPolicy", mock_env_box, n_steps=2048, batch_size=64, learning_rate=0.0003, device="auto")
             sac = SAC.load(sac_path, env=mock_env_box) if os.path.exists(sac_path) else SAC("MlpPolicy", mock_env_box, buffer_size=50000, batch_size=256, learning_starts=1000, device="auto")
             dqn = DQN.load(dqn_path, env=mock_env_dqn) if os.path.exists(dqn_path) else DQN("MlpPolicy", mock_env_dqn, buffer_size=50000, batch_size=128, learning_starts=1000, exploration_fraction=0.2, device="auto")
@@ -123,15 +123,15 @@ def main():
             sac = SAC("MlpPolicy", mock_env_box, buffer_size=50000, batch_size=256, learning_starts=1000, device="auto")
             dqn = DQN("MlpPolicy", mock_env_dqn, buffer_size=50000, batch_size=128, learning_starts=1000, exploration_fraction=0.2, device="auto")
 
-        # Conectar na Unity
-        print("[*] Aguardando conexão com a Unity (Dê Play na cena CompetitiveParkour)...")
+        # Connect to Unity
+        print("[*] Waiting for Unity connection (Press Play in the CompetitiveParkour scene)...")
         channel = EngineConfigurationChannel()
         channel.set_configuration_parameters(time_scale=3.0)
         env = UnityEnvironment(file_name=args.env, side_channels=[channel], no_graphics=False)
         env.reset()
         
         behavior_names = list(env.behavior_specs.keys())
-        print(f"[*] Behaviors detectados na cena: {behavior_names}")
+        print(f"[*] Behaviors detected in scene: {behavior_names}")
 
         obs_dict = {}
         for name in behavior_names:
@@ -146,12 +146,12 @@ def main():
 
         step = 0
         try:
-            print("[*] Treinamento simultâneo iniciado com sucesso!")
+            print("[*] Simultaneous training started successfully!")
             while True:
                 actions_to_send = {}
                 sb3_actions = {}
 
-                # 1. Obter ações das 3 redes neurais (Forward Pass)
+                # 1. Get actions from the 3 neural networks (Forward Pass)
                 for name in behavior_names:
                     obs = obs_dict[name]
                     
@@ -169,7 +169,7 @@ def main():
                         actions_to_send[name] = convert_box_action(action)
                         
                     elif "DQN" in name:
-                        # Epsilon-greedy exploração manual para injetar no loop da Unity
+                        # Manual epsilon-greedy exploration to inject into the Unity loop
                         epsilon = max(0.05, 1.0 - step / (dqn.exploration_fraction * 100000))
                         if np.random.rand() < epsilon:
                             action = np.random.randint(18)
@@ -179,13 +179,13 @@ def main():
                         sb3_actions[name] = action
                         actions_to_send[name] = convert_dqn_action(action)
 
-                # 2. Enviar ações pela ponte ML-Agents e avançar 1 step físico
+                # 2. Send actions through the ML-Agents bridge and advance 1 physics step
                 for name in behavior_names:
                     if name in actions_to_send:
                         env.set_actions(name, actions_to_send[name])
                 env.step()
 
-                # 3. Processar novos estados e recompensas
+                # 3. Process new states and rewards
                 for name in behavior_names:
                     if name not in obs_dict: continue
                     
@@ -199,12 +199,12 @@ def main():
                         reward = dec.reward[0]
                         done = False
                     else:
-                        continue # O agente pode ter demorado 1 frame a mais para solicitar decisão
+                        continue # The agent may have taken 1 extra frame to request a decision
                         
                     ep_rewards[name] += reward
                     old_obs = obs_dict[name]
 
-                    # 4. Inserir memória nos Replay Buffers do SB3 e disparar Backward Pass (Treinamento)
+                    # 4. Insert memory into SB3 Replay Buffers and trigger Backward Pass (Training)
                     if "PPO" in name:
                         action, value, log_prob = sb3_actions[name]
                         ppo.rollout_buffer.add(old_obs, action, reward, done, value, log_prob)
@@ -228,18 +228,18 @@ def main():
 
                     obs_dict[name] = next_obs
                     
-                    # 5. MLOps: Rastreio de performance
+                    # 5. MLOps: Performance tracking
                     if done:
                         ep_counts[name] += 1
-                        print(f"[{name}] Episódio {ep_counts[name]} finalizado | Recompensa Acumulada: {ep_rewards[name]:.2f}")
+                        print(f"[{name}] Episode {ep_counts[name]} finished | Cumulative Reward: {ep_rewards[name]:.2f}")
                         
-                        # Limpar caracteres inválidos para o MLflow
+                        # Clean invalid characters for MLflow
                         clean_name = name.replace("?", "_").replace("=", "_").replace("-", "_")
                         mlflow.log_metric(f"{clean_name}_reward", ep_rewards[name], step=ep_counts[name])
                         
                         ep_rewards[name] = 0.0
                         
-                        # Backup de Checkpoints no MLflow a cada 50 episódios
+                        # Checkpoint backup to MLflow every 50 episodes
                         if ep_counts[name] % 50 == 0:
                             model_path = f"models/{args.run_id}/{name}_model.zip"
                             onnx_path = f"models/{args.run_id}/{name}_model.onnx"
@@ -261,7 +261,7 @@ def main():
                 step += 1
 
         except KeyboardInterrupt:
-            print("[!] Treinamento interrompido pelo usuário. Salvando modelos finais (ZIP e ONNX) no MLflow...")
+            print("[!] Training interrupted by user. Saving final models (ZIP and ONNX) to MLflow...")
             os.makedirs(f"models/{args.run_id}", exist_ok=True)
             ppo.save(f"models/{args.run_id}/MarioParkourPPO_final.zip")
             sac.save(f"models/{args.run_id}/MarioParkourSAC_final.zip")

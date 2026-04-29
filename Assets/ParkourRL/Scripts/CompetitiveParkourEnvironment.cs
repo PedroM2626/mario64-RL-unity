@@ -7,23 +7,23 @@ using LibSM64;
 namespace ParkourRL
 {
     /// <summary>
-    /// Ambiente competitivo para 3 Marios (PPO, SAC, DQN) simultaneos no mesmo mapa.
-    /// Cores e texturas sao configuraveis no Inspector e aplicadas em runtime.
+    /// Competitive environment for 3 simultaneous Marios (PPO, SAC, DQN) on the same map.
+    /// Colors and textures are configurable in the Inspector and applied at runtime.
     /// </summary>
     public class CompetitiveParkourEnvironment : MonoBehaviour
     {
         [Header("Mario Material (Opcional)")]
-        [Tooltip("Material base opcional. Se nao atribuido, usa o marioPrefab como fallback.")]
+        [Tooltip("Optional base material. If not assigned, uses marioPrefab as fallback.")]
         [SerializeField] private Material baseMarioMaterial;
-        [Tooltip("Prefab opcional para obter material de fallback.")]
+        [Tooltip("Optional prefab to obtain fallback material.")]
         [SerializeField] private GameObject marioPrefab;
 
         [Header("Cores dos Modelos (Inspector)")]
-        [Tooltip("Cor do Mario PPO (Equipe 0).")]
+        [Tooltip("PPO Mario color (Team 0).")]
         [SerializeField] private Color ppoColor = new Color(1f, 0.2f, 0.2f, 1f);
-        [Tooltip("Cor do Mario SAC (Equipe 1).")]
+        [Tooltip("SAC Mario color (Team 1).")]
         [SerializeField] private Color sacColor = new Color(0.2f, 0.4f, 1f, 1f);
-        [Tooltip("Cor do Mario DQN (Equipe 2).")]
+        [Tooltip("DQN Mario color (Team 2).")]
         [SerializeField] private Color dqnColor = new Color(0.2f, 0.9f, 0.2f, 1f);
 
         [Header("Level")]
@@ -39,11 +39,11 @@ namespace ParkourRL
         private List<MarioCompetitiveAgent> agents = new List<MarioCompetitiveAgent>();
         private int finishOrder = 0;
         
-        // Placar
+        // Scoreboard
         private Dictionary<string, int> scores = new Dictionary<string, int>();
         private Text scoreText;
 
-        // Materiais runtime
+        // Runtime materials
         private Material ppoRuntimeMaterial;
         private Material sacRuntimeMaterial;
         private Material dqnRuntimeMaterial;
@@ -62,19 +62,19 @@ namespace ParkourRL
 
         private IEnumerator InitTerrainAndSpawn()
         {
-            // Aguarda 1 ciclo de fisica para garantir que os MeshColliders estejam prontos
+            // Wait 1 physics cycle to ensure MeshColliders are ready
             yield return new WaitForFixedUpdate();
             
-            // Garantir que todos os terrains tenham MeshColliders
+            // Ensure all terrains have MeshColliders
             EnsureAllMeshColliders();
 
-            // Recarregar terreno SM64
+            // Reload SM64 terrain
             SM64Context.RefreshStaticTerrain();
-            Debug.Log("[CompetitiveEnv] Terreno SM64 recarregado.");
+            Debug.Log("[CompetitiveEnv] SM64 terrain reloaded.");
 
             yield return new WaitForFixedUpdate();
 
-            // Spawnar todos os Marios
+            // Spawn all Marios
             SpawnAllMarios();
         }
 
@@ -123,7 +123,7 @@ namespace ParkourRL
                 string sacHex = ColorUtility.ToHtmlStringRGB(sacColor);
                 string dqnHex = ColorUtility.ToHtmlStringRGB(dqnColor);
 
-                scoreText.text = $"<b>Vitorias por Modelo:</b>\n" +
+                scoreText.text = $"<b>Wins by Model:</b>\n" +
                                  $"<color=#{ppoHex}>PPO: {scores["PPO"]}</color>\n" +
                                  $"<color=#{sacHex}>SAC: {scores["SAC"]}</color>\n" +
                                  $"<color=#{dqnHex}>DQN: {scores["DQN"]}</color>\n\n" +
@@ -134,7 +134,7 @@ namespace ParkourRL
         private void EnsureAllMeshColliders()
         {
             SM64StaticTerrain[] terrains = FindObjectsOfType<SM64StaticTerrain>();
-            Debug.Log($"[CompetitiveEnv] Encontrados {terrains.Length} terrains SM64");
+            Debug.Log($"[CompetitiveEnv] Found {terrains.Length} SM64 terrains");
             
             int collidersAdded = 0;
             foreach (var terrain in terrains)
@@ -151,7 +151,7 @@ namespace ParkourRL
                     }
                 }
             }
-            Debug.Log($"[CompetitiveEnv] {collidersAdded} MeshColliders adicionados");
+            Debug.Log($"[CompetitiveEnv] {collidersAdded} MeshColliders added");
         }
 
         private Material ResolveBaseMaterial()
@@ -198,12 +198,12 @@ namespace ParkourRL
             Material matBase = ResolveBaseMaterial();
             marioCount = 3;
 
-            // Criar materiais runtime com cores configuraveis no Inspector
+            // Create runtime materials with colors configurable in the Inspector
             ppoRuntimeMaterial = CreateRuntimeMaterial(matBase, ppoColor, "PPO");
             sacRuntimeMaterial = CreateRuntimeMaterial(matBase, sacColor, "SAC");
             dqnRuntimeMaterial = CreateRuntimeMaterial(matBase, dqnColor, "DQN");
 
-            Debug.Log($"[CompetitiveEnv] Iniciando spawn de {marioCount} Marios.");
+            Debug.Log($"[CompetitiveEnv] Starting spawn of {marioCount} Marios.");
 
             for (int i = 0; i < marioCount; i++)
             {
@@ -213,13 +213,13 @@ namespace ParkourRL
                 SpawnMario(i, spawnPos, teamColor, runtimeMat);
             }
 
-            Debug.Log($"[CompetitiveEnv] Total de agentes criados: {agents.Count}");
+            Debug.Log($"[CompetitiveEnv] Total agents created: {agents.Count}");
             foreach (var agent in agents)
             {
                 agent.SetRivals(agents);
             }
 
-            Debug.Log("[CompetitiveEnv] 3 Marios competitivos spawnados com sucesso!");
+            Debug.Log("[CompetitiveEnv] 3 competitive Marios spawned successfully!");
         }
 
         private Vector3 GetSpawnPositionForIndex(int index)
@@ -246,7 +246,7 @@ namespace ParkourRL
             marioObj.SetActive(false);
             marioObj.transform.position = spawnPos;
 
-            // 1. Behavior Parameters PRIMEIRO (Agent precisa disso no OnEnable)
+            // 1. Behavior Parameters FIRST
             var bp = marioObj.AddComponent<Unity.MLAgents.Policies.BehaviorParameters>();
             bp.BehaviorName = modelName;
             bp.BehaviorType = Unity.MLAgents.Policies.BehaviorType.Default;
@@ -254,18 +254,22 @@ namespace ParkourRL
             bp.BrainParameters.NumStackedVectorObservations = 1;
             bp.BrainParameters.ActionSpec = new Unity.MLAgents.Actuators.ActionSpec(2, new int[] { 2, 2, 2 });
 
-            // 2. DecisionRequester
+            // 2. MarioCompetitiveAgent MUST BE ADDED BEFORE DecisionRequester
+            // Otherwise, DecisionRequester's [RequireComponent(typeof(Agent))] will auto-add a base Agent!
+            MarioCompetitiveAgent agent = marioObj.AddComponent<MarioCompetitiveAgent>();
+
+            // 3. DecisionRequester
             var dr = marioObj.AddComponent<Unity.MLAgents.DecisionRequester>();
             dr.DecisionPeriod = 5;
             dr.TakeActionsBetweenDecisions = true;
 
-            // 3. Input provider ANTES de SM64Mario
+            // 4. Input provider
             marioObj.AddComponent<MarioInputProvider>();
             
-            // 4. SM64Mario
+            // 5. SM64Mario
             SM64Mario sm64Mario = marioObj.AddComponent<SM64Mario>();
             
-            // 5. Aplicar material runtime customizado
+            // 5. Apply custom runtime material
             if (runtimeMat != null)
             {
                 sm64Mario.useCustomTexture = true;
@@ -277,7 +281,7 @@ namespace ParkourRL
                     materialField.SetValue(sm64Mario, runtimeMat);
             }
 
-            // 5.5. Collider que corresponde ao mesh do Mario para colisao Unity
+            // 5.5. Collider matching Mario's mesh for Unity collision
             var capsule = marioObj.AddComponent<CapsuleCollider>();
             capsule.center = new Vector3(0, 0.5f, 0);
             capsule.radius = 0.3f;
@@ -285,31 +289,30 @@ namespace ParkourRL
             capsule.isTrigger = false;
 
             var rb = marioObj.AddComponent<Rigidbody>();
-            rb.isKinematic = true; // SM64 controla a posicao, nao a fisica do Unity
+            rb.isKinematic = true; // SM64 controls position, not Unity physics
             rb.useGravity = false;
 
-            // 6. Agente competitivo DEPOIS de BehaviorParameters
-            MarioCompetitiveAgent agent = marioObj.AddComponent<MarioCompetitiveAgent>();
+            // Configure agent properties
             agent.teamId = index;
             agent.teamColor = teamColor;
             agent.SetGoal(goal);
             agent.SetCompetitiveEnv(this);
             agents.Add(agent);
-
-            // 7. Ativar
+            
+            // Ativa o objeto apenas após todos os componentes estarem configurados
             marioObj.SetActive(true);
             
-            // 8. Teleportar para garantir posicao correta no terreno SM64 (apos 1 frame)
+            // 8. Teleport to ensure correct position on SM64 terrain (after 1 frame)
             StartCoroutine(TeleportMarioNextFrame(sm64Mario, spawnPos));
         }
 
         private System.Collections.IEnumerator TeleportMarioNextFrame(SM64Mario sm64Mario, Vector3 pos)
         {
-            yield return null; // Aguarda 1 frame
+            yield return null; // Wait 1 frame
             if (sm64Mario != null && sm64Mario.isActiveAndEnabled)
             {
                 sm64Mario.Teleport(pos);
-                Debug.Log($"[CompetitiveEnv] Mario teleportado para {pos}");
+                Debug.Log($"[CompetitiveEnv] Mario teleported to {pos}");
             }
         }
 
@@ -348,7 +351,7 @@ namespace ParkourRL
             if (allDone)
             {
                 finishOrder = 0;
-                Debug.Log("[CompetitiveEnv] Todos os Marios terminaram! Resetando ordem.");
+                Debug.Log("[CompetitiveEnv] All Marios finished! Resetting order.");
             }
 
             return position;

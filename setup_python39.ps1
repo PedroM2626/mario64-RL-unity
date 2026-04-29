@@ -1,66 +1,66 @@
-# Script para baixar e instalar Python 3.9 automaticamente
-# Isso resolve a incompatibilidade do ML-Agents com Python 3.10+
+# Script to download and install Python 3.9 automatically
+# This resolves the ML-Agents incompatibility with Python 3.10+
 
 $pythonInstallerUrl = "https://www.python.org/ftp/python/3.9.13/python-3.9.13-amd64.exe"
 $installerPath = "$env:TEMP\python-3.9.13-amd64.exe"
 $targetDir = "C:\Python39"
 
 Write-Host "======================================" -ForegroundColor Green
-Write-Host "  Instalando Python 3.9 para ML-Agents" -ForegroundColor Green
+Write-Host "  Installing Python 3.9 for ML-Agents" -ForegroundColor Green
 Write-Host "======================================" -ForegroundColor Green
 Write-Host ""
 
-# Verificar se Python 3.9 já está instalado
+# Check if Python 3.9 is already installed
 if (Test-Path "$targetDir\python.exe") {
-    Write-Host "Python 3.9 já está instalado em $targetDir" -ForegroundColor Green
+    Write-Host "Python 3.9 is already installed at $targetDir" -ForegroundColor Green
     Write-Host ""
-    Write-Host "Para continuar a configuração:" -ForegroundColor Cyan
-    Write-Host "1. Execute: .\setup_training_env.ps1" -ForegroundColor Yellow
+    Write-Host "To continue setup:" -ForegroundColor Cyan
+    Write-Host "1. Run: .\setup_training_env.ps1" -ForegroundColor Yellow
     Write-Host ""
     exit 0
 }
 
-# Baixar o instalador
-Write-Host "Baixando Python 3.9..." -ForegroundColor Cyan
+# Download the installer
+Write-Host "Downloading Python 3.9..." -ForegroundColor Cyan
 Write-Host "URL: $pythonInstallerUrl" -ForegroundColor Gray
-Write-Host "Destino: $installerPath" -ForegroundColor Gray
+Write-Host "Destination: $installerPath" -ForegroundColor Gray
 
 try {
     Invoke-WebRequest -Uri $pythonInstallerUrl -OutFile $installerPath -UseBasicParsing
-    Write-Host "Download concluído!" -ForegroundColor Green
+    Write-Host "Download completed!" -ForegroundColor Green
 } catch {
-    Write-Host "ERRO: Falha ao baixar Python 3.9" -ForegroundColor Red
-    Write-Host "Erro: $_" -ForegroundColor Red
+    Write-Host "ERROR: Failed to download Python 3.9" -ForegroundColor Red
+    Write-Host "Error: $_" -ForegroundColor Red
     Write-Host ""
-    Write-Host "Alternativa: Baixe manualmente de:" -ForegroundColor Yellow
+    Write-Host "Alternative: Download manually from:" -ForegroundColor Yellow
     Write-Host "https://www.python.org/downloads/release/python-3913/" -ForegroundColor Cyan
     exit 1
 }
 
-# Instalar Python silenciosamente
+# Install Python silently
 Write-Host ""
-Write-Host "Instalando Python 3.9 em $targetDir..." -ForegroundColor Cyan
-Write-Host "Isso pode levar alguns minutos..." -ForegroundColor Yellow
+Write-Host "Installing Python 3.9 at $targetDir..." -ForegroundColor Cyan
+Write-Host "This may take a few minutes..." -ForegroundColor Yellow
 
 $installArgs = "/quiet InstallAllUsers=1 PrependPath=1 TargetDir=`"$targetDir`""
 $process = Start-Process -FilePath $installerPath -ArgumentList $installArgs -Wait -PassThru
 
 if ($process.ExitCode -ne 0) {
-    Write-Host "ERRO: Falha na instalação do Python (Exit code: $($process.ExitCode))" -ForegroundColor Red
+    Write-Host "ERROR: Python installation failed (Exit code: $($process.ExitCode))" -ForegroundColor Red
     exit 1
 }
 
-# Limpar arquivo temporário
+# Clean up temp file
 Remove-Item $installerPath -ErrorAction SilentlyContinue
 
 Write-Host ""
 Write-Host "======================================" -ForegroundColor Green
-Write-Host "  Python 3.9 Instalado com Sucesso!" -ForegroundColor Green
+Write-Host "  Python 3.9 Installed Successfully!" -ForegroundColor Green
 Write-Host "======================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "Local: $targetDir" -ForegroundColor Cyan
+Write-Host "Location: $targetDir" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Próximo passo:" -ForegroundColor Cyan
-Write-Host "Execute: .\setup_training_env.ps1" -ForegroundColor Yellow
+Write-Host "Next step:" -ForegroundColor Cyan
+Write-Host "Run: .\setup_training_env.ps1" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "Isso vai criar o ambiente virtual e instalar o ML-Agents" -ForegroundColor Cyan
+Write-Host "This will create the virtual environment and install ML-Agents" -ForegroundColor Cyan

@@ -47,7 +47,7 @@ behaviors:
         gamma: 0.99
         strength: 1.0
 
-    # Self-play para competicao em times
+    # Self-play for team competition
     self_play:
       save_steps: 50000
       team_change: 100000
@@ -56,7 +56,7 @@ behaviors:
 
     # MA-POCA: Multi-Agent POsthumous Credit Assignment
     # Centralized Training with Decentralized Execution (CTDE)
-    # Group reward signals sao distribuidos automaticamente pelo SimpleMultiAgentGroup
+    # Group reward signals are automatically distributed by SimpleMultiAgentGroup
 
     checkpoint_interval: 200000
     max_steps: 10000000

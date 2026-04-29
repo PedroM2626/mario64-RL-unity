@@ -1,71 +1,49 @@
 # libsm64-unity-dev - Parkour RL + Hybrid Training System
 
-Sistema completo para treinar agentes de IA em ambientes de parkour do Super Mario 64 usando **Reinforcement Learning**, **Imitation Learning** e **Offline RL**.
-
-## Novidades: CompetitiveParkour (PPO, SAC, DQN)
-O projeto agora suporta o treinamento simultaneo de 3 algoritmos distintos no mesmo ambiente de parkour. Nenhum agente perde pontos para o outro; eles disputam puramente quem chega ao goal primeiro.
-- **Mario PPO (Vermelho)**
-- **Mario SAC (Azul)**
-- **Mario DQN (Verde)**
-
-O ambiente `CompetitiveParkour` e um environment dedicado (nao reutiliza o parkour antigo), sem parallel training. As cores e texturas de cada Mario sao configuraveis diretamente no Inspector do `CompetitiveParkourEnvironment`. Um HUD na tela mostra o placar de vitorias de cada modelo em tempo real. O treinamento e feito via `train_competitive_sb3.py` com TensorBoard e integracao MLOps (MLflow).
+A complete system for training AI agents in Super Mario 64 parkour environments using **Reinforcement Learning**, **Imitation Learning**, and **Offline RL**, powered by [libsm64](https://github.com/libsm64/libsm64-unity) and Unity ML-Agents.
 
 ---
 
-## 📋 Índice
+## Table of Contents
 
-- [Setup Inicial](#setup-inicial)
-- [Arquitetura do Projeto](#arquitetura-do-projeto)
-- [Sistemas de Treinamento](#sistemas-de-treinamento)
-- [Cenas Disponíveis](#cenas-disponíveis)
-- [Instruções de Uso](#instruções-de-uso)
-- [Treinamento MLOps](#treinamento-mlops)
-- [API e Componentes](#api-e-componentes)
+- [Features](#features)
+- [Project Architecture](#project-architecture)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Training Systems](#training-systems)
+  - [Parkour RL (Traditional)](#1-parkour-rl-traditional)
+  - [Hybrid Training System](#2-hybrid-training-system)
+  - [Competitive Parkour (PPO, SAC, DQN)](#3-competitive-parkour-ppo-sac-dqn)
+  - [Team Battle](#4-team-battle)
+  - [Chase Training (Pursuer vs Fugitive)](#5-chase-training-pursuer-vs-fugitive)
+- [Available Scenes](#available-scenes)
+- [Usage Instructions](#usage-instructions)
+- [MLOps Integration](#mlops-integration)
+- [API Reference](#api-reference)
+- [Configuration](#configuration)
+- [Docker](#docker)
 - [Troubleshooting](#troubleshooting)
+- [References](#references)
+- [License](#license)
 
 ---
 
-## Setup Inicial
+## Features
 
-### Pré-requisitos
-
-- **Unity**: 2019.3.10 ou superior
-- **Python**: 3.8 ou 3.9 (recomendado 3.9)
-- **ROM**: Super Mario 64 US (MD5: `20b854b239203baf6c961b850a4a51a2`)
-
-### Instalação
-
-1. Clone com submodulos:
-    ```bash
-    git clone https://github.com/libsm64/libsm64-unity-dev
-    cd libsm64-unity-dev
-    git submodule update --init --recursive
-    ```
-
-2. Coloque a ROM `baserom.us.z64` na raiz do projeto:
-    ```
-    libsm64-unity-dev/
-    ├── baserom.us.z64    ← Coloque aqui
-    ├── Assets/
-    └── ...
-    ```
-
-3. Abra o projeto no Unity
-
-4. Instale dependências Python:
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-5. (Opcional) Configure virtual environment:
-    ```powershell
-    # PowerShell
-    .\setup_python39.ps1  # ou setup_python38.ps1
-    ```
+- **Multi-Algorithm Competitive Training**: Simultaneously train PPO, SAC, and DQN agents on the same parkour map
+- **Hybrid Learning Pipeline**: Combine Imitation Learning, Offline RL (CQL/IQL), and Online RL
+- **Parallel Environment Support**: Train with up to 4 parallel Mario agents
+- **MLOps Integration**: Full experiment tracking via MLflow with TensorBoard visualization
+- **ONNX Export**: Export trained models for inference in Unity
+- **Curriculum Learning**: Progressive difficulty with win-rate-based advancement
+- **Team Battle Mode**: Multi-agent cooperative/competitive training with MA-POCA
+- **Chase Training**: Pursuer vs Fugitive SAC-based training
+- **Docker Support**: Containerized training environment
+- **Recording System**: Record human demonstrations for Imitation Learning
 
 ---
 
-## Arquitetura do Projeto
+## Project Architecture
 
 ```
 libsm64-unity-dev/
@@ -73,117 +51,183 @@ libsm64-unity-dev/
 │   ├── ParkourRL/
 │   │   ├── Scripts/
 │   │   │   ├── BackupSystem/
-│   │   │   │   ├── BackupParkourEnvironment.cs     [Sistema de Recording]
+│   │   │   │   ├── BackupParkourEnvironment.cs     [Recording System]
 │   │   │   │   ├── BackupMarioRLAgent.cs
 │   │   │   │   └── BackupCheckpoint.cs
 │   │   │   ├── HybridSystem/
-│   │   │   │   ├── MarioHybridAgent.cs             [Agente Híbrido]
+│   │   │   │   ├── MarioHybridAgent.cs             [Hybrid Agent]
 │   │   │   │   ├── HybridParkourEnvironment.cs
-│   │   │   │   ├── HybridDataRecorder.cs           [Grava dados]
-│   │   │   │   ├── HybridTrainingManager.cs        [Gerencia modos]
+│   │   │   │   ├── HybridDataRecorder.cs           [Records data]
+│   │   │   │   ├── HybridTrainingManager.cs        [Manages modes]
 │   │   │   │   ├── README_HYBRID.md                [Docs]
 │   │   │   │   ├── QUICKSTART.md
 │   │   │   │   └── HybridSceneSetup.md
-│   │   │   ├── ParkourEnvironment.cs               [RL tradicional]
+│   │   │   ├── ParkourEnvironment.cs               [Traditional RL]
 │   │   │   ├── MarioRLAgent.cs
 │   │   │   ├── MarioInputProvider.cs
 │   │   │   ├── PlayerMarioSpawner.cs
-│   │   │   ├── CompetitiveParkourEnvironment.cs    [Modo competitivo]
-│   │   │   └── TeamBattleEnvironment.cs            [Modo time]
+│   │   │   ├── CompetitiveParkourEnvironment.cs    [Competitive mode]
+│   │   │   ├── MarioCompetitiveAgent.cs
+│   │   │   ├── ChaseTrainingEnvironment.cs         [Chase mode]
+│   │   │   ├── ChaseAgent.cs
+│   │   │   ├── TeamBattleEnvironment.cs            [Team mode]
+│   │   │   └── TeamBattleAgent.cs
 │   │   ├── Scenes/
-│   │   │   ├── ParkourTraining.unity               [RL Padrão]
+│   │   │   ├── ParkourTraining.unity               [Standard RL]
 │   │   │   ├── ParkourTraining_OldSystem.unity
 │   │   │   ├── HybridTraining.unity                [IL + RL]
 │   │   │   ├── CompetitiveParkour.unity
+│   │   │   ├── ChaseTraining.unity
 │   │   │   └── TeamBattle.unity
 │   │   ├── Config/
-│   │   │   ├── mario_parkour.yaml                  [Config RL]
-│   │   │   └── mario_parkour_hybrid.yaml           [Config Híbrida]
-│   │   └── Prefabs/
-│   │       └── Mario.prefab
-│   └── libsm64-unity/                              [Wrapper nativo]
+│   │   │   ├── mario_parkour.yaml                  [RL Config]
+│   │   │   └── mario_parkour_hybrid.yaml           [Hybrid Config]
+│   │   └── Models/
+│   └── libsm64-unity/                              [Native wrapper]
 │
 ├── python_trainers/
 │   ├── train_behavior_cloning.py                   [Imitation Learning]
 │   ├── train_offline_rl.py                         [Offline RL (CQL/IQL)]
-│   ├── analyze_dataset.py                          [Análise de dados]
+│   ├── analyze_dataset.py                          [Data analysis]
 │   └── requirements.txt
 │
-├── HybridTrainingData/                             [Dados gravados]
-├── results/                                        [Modelos treinados]
-├── train_hybrid.ps1                                [Script treinamento]
-├── train_mario.ps1
-├── train_competitive_sb3.py                        [Treino SB3 competitivo c/ TensorBoard]
-├── trainer_mlflow.py                               [MLOps]
-├── requirements.txt
-├── Dockerfile
+├── config/
+│   ├── chase_training_sac.yaml                     [Chase SAC config]
+│   └── team_battle_poca.yaml                       [Team Battle config]
+│
+├── HybridTrainingData/                             [Recorded data]
+├── models/                                         [Trained models]
+├── results/                                        [Training results]
+├── tensorboard_logs/                               [TensorBoard logs]
+│
+├── train_competitive_sb3.py                        [SB3 competitive training w/ TensorBoard]
+├── train_simultaneous_sb3.py                       [Simultaneous multi-algo training]
+├── train_mlops.py                                  [MLOps wrapper]
+├── trainer_mlflow.py                               [MLflow trainer]
+├── validate_recording_integration.py               [Recording validation]
+│
+├── train_mario.ps1 / .bat                          [Standard training scripts]
+├── train_hybrid.ps1 / .bat                         [Hybrid training scripts]
+├── train_chase.ps1                                 [Chase training script]
+├── train_mario_fast.bat                            [Fast training script]
+├── setup_training_env.ps1                          [Environment setup]
+├── setup_python38.ps1 / setup_python39.ps1         [Python installers]
+│
+├── requirements.txt                                [Python dependencies]
+├── Dockerfile                                      [Docker support]
 └── README.md
 ```
 
 ---
 
-## Sistemas de Treinamento
+## Prerequisites
 
-### 1. **Parkour RL (Tradicional)**
-
-Treinamento com **4 Marios paralelos** usando PPO.
-
-**Componentes:**
-- `ParkourEnvironment.cs` - Orquestrador
-- `MarioRLAgent.cs` - Agente ML-Agents
-- `MarioInputProvider.cs` - Controle
-- `BackupMarioRLAgent.cs` - Versão simplificada
-
-**Início:**
-```powershell
-# Terminal 1: Iniciar trainer
-mlagents-learn Assets/ParkourRL/Config/mario_parkour.yaml --run-id parkour_v1
-
-# Terminal 2: Play na cena ParkourTraining.unity
-```
-
-**Observações (30-dim):**
-| Campo | Índices | Valores |
-|-------|---------|---------|
-| Posição (x,y,z) | 0-2 | [-1, 1] |
-| Direção ao goal (x,y,z,dist) | 3-6 | [-1, 1] |
-| Velocidade (x,y,z) | 7-9 | [-1, 1] |
-| No ar? | 10 | {0, 1} |
-| Raycasts 8 direcções | 11-26 | [0, 1] |
-| Raycast para baixo | 27 | [0, 1] |
-| Pulando? | 28 | {0, 1} |
-| Tempo / 30s | 29 | [0, 1] |
-
-**Actions:**
-- `[0]` Joystick X: [-1, 1] (esquerda/direita)
-- `[1]` Joystick Y: [-1, 1] (frente/trás)
-- `[2]` Pular: {0, 1} (discreto)
+- **Unity**: 2019.3.10 or higher
+- **Python**: 3.8 or 3.9 (3.9 recommended)
+- **ROM**: Super Mario 64 US (MD5: `20b854b239203baf6c961b850a4a51a2`)
 
 ---
 
-### 2. **Hybrid Training System** 
+## Installation
 
-Combina **Imitation Learning (IL)**, **Offline RL** e **Online RL** em um único fluxo.
+1. Clone with submodules:
+    ```bash
+    git clone https://github.com/libsm64/libsm64-unity-dev
+    cd libsm64-unity-dev
+    git submodule update --init --recursive
+    ```
 
-**Arquitetura:**
+2. Place the ROM `baserom.us.z64` in the project root:
+    ```
+    libsm64-unity-dev/
+    ├── baserom.us.z64    <-- Place here
+    ├── Assets/
+    └── ...
+    ```
+
+3. Open the project in Unity
+
+4. Install Python dependencies:
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+5. (Optional) Configure virtual environment:
+    ```powershell
+    # PowerShell
+    .\setup_python39.ps1  # or setup_python38.ps1
+    .\setup_training_env.ps1
+    ```
+
+---
+
+## Training Systems
+
+### 1. **Parkour RL (Traditional)**
+
+Training with **4 parallel Marios** using PPO.
+
+**Components:**
+- `ParkourEnvironment.cs` - Orchestrator
+- `MarioRLAgent.cs` - ML-Agents agent
+- `MarioInputProvider.cs` - Input control
+- `BackupMarioRLAgent.cs` - Simplified version
+
+**Quick Start:**
+```powershell
+# Terminal 1: Start trainer
+mlagents-learn Assets/ParkourRL/Config/mario_parkour.yaml --run-id parkour_v1
+
+# Terminal 2: Play the ParkourTraining.unity scene
 ```
-Fase 1: Recording (Grava demos do player)
-  ↓
-Fase 2: Behavior Cloning (Treina rede a imitar)
-  ↓
-Fase 3: Offline RL (Refina com CQL/IQL)
-  ↓
-Fase 4: Online RL com Warm-Start (PPO + pesos iniciais)
+
+**Observations (30-dim):**
+| Field | Indices | Values |
+|-------|---------|--------|
+| Position (x,y,z) | 0-2 | [-1, 1] |
+| Direction to goal (x,y,z,dist) | 3-6 | [-1, 1] |
+| Velocity (x,y,z) | 7-9 | [-1, 1] |
+| Airborne? | 10 | {0, 1} |
+| 8-direction raycasts | 11-26 | [0, 1] |
+| Downward raycast | 27 | [0, 1] |
+| Jumping? | 28 | {0, 1} |
+| Time / 30s | 29 | [0, 1] |
+
+**Actions:**
+- `[0]` Joystick X: [-1, 1] (left/right)
+- `[1]` Joystick Y: [-1, 1] (forward/back)
+- `[2]` Jump: {0, 1} (discrete)
+
+**Training Progress:**
+- Step 0-100k: Mario learns to move
+- Step 100k-500k: Mario attempts platform jumps
+- Step 500k+: Mario can complete the parkour
+
+---
+
+### 2. **Hybrid Training System**
+
+Combines **Imitation Learning (IL)**, **Offline RL**, and **Online RL** in a single pipeline.
+
+**Architecture:**
+```
+Phase 1: Recording (Record player demos)
+  |
+Phase 2: Behavior Cloning (Train network to imitate)
+  |
+Phase 3: Offline RL (Refine with CQL/IQL)
+  |
+Phase 4: Online RL with Warm-Start (PPO + initial weights)
 ```
 
-**Componentes:**
-- `BackupParkourEnvironment.cs` - Controla modo Recording/Training
-- `HybridDataRecorder.cs` - Salva dados em JSON/CSV
-- `RecordingInputProvider` - Captura input humano
+**Components:**
+- `BackupParkourEnvironment.cs` - Controls Recording/Training mode
+- `HybridDataRecorder.cs` - Saves data in JSON/CSV
+- `RecordingInputProvider` - Captures human input
 - `train_behavior_cloning.py` - BC training
 - `train_offline_rl.py` - CQL/IQL training
 
-**Arquivo de Dados:**
+**Data File Format:**
 ```json
 {
   "metadata": {
@@ -206,8 +250,8 @@ Fase 4: Online RL com Warm-Start (PPO + pesos iniciais)
         {
           "step": 0,
           "timestamp": 0.0,
-          "observations": [0.1, 0.2, 0.0, ...],  // 30 dims
-          "actions": [0.5, 0.0, 1.0],           // [joy_x, joy_y, jump]
+          "observations": [0.1, 0.2, 0.0, ...],
+          "actions": [0.5, 0.0, 1.0],
           "reward": 2.5,
           "nextObservations": [0.11, 0.21, ...],
           "done": false
@@ -218,32 +262,32 @@ Fase 4: Online RL com Warm-Start (PPO + pesos iniciais)
 }
 ```
 
-**Workflow Completo:**
+**Full Workflow:**
 
 ```powershell
-# 1. Gerar dados em Recording mode
-# Unity: HybridTraining.unity → Modo Recording (pressione M) → Jogar
-# Dados salvos em: HybridTrainingData/hybrid_episodes_*.json
+# 1. Generate data in Recording mode
+# Unity: HybridTraining.unity -> Recording mode (press M) -> Play
+# Data saved to: HybridTrainingData/hybrid_episodes_*.json
 
-# 2. Analisar dataset
+# 2. Analyze dataset
 cd python_trainers
 python analyze_dataset.py --data ../HybridTrainingData/ --plots
 
-# 3. Treinar Behavior Cloning
+# 3. Train Behavior Cloning
 python train_behavior_cloning.py \
     --data ../HybridTrainingData/ \
     --epochs 100 \
     --batch-size 32 \
     --output models/bc_mario.pth
 
-# 4. Treinar Offline RL (CQL)
+# 4. Train Offline RL (CQL)
 python train_offline_rl.py \
     --data ../HybridTrainingData/ \
     --algo CQL \
     --epochs 50 \
     --output models/cql_mario.pth
 
-# 5. Treinar Online RL com warm-start (próxima versão)
+# 5. Train Online RL with warm-start (future version)
 mlagents-learn Assets/ParkourRL/Config/mario_parkour_hybrid.yaml \
     --run-id=mario_hybrid_bc \
     --initialize-from=models/bc_mario.pth
@@ -251,142 +295,166 @@ mlagents-learn Assets/ParkourRL/Config/mario_parkour_hybrid.yaml \
 
 ---
 
-### 3. **Modo Competitivo (CompetitiveParkour)**
+### 3. **Competitive Parkour (PPO, SAC, DQN)**
 
-Tres modelos (PPO, SAC, DQN) competem simultaneamente para chegar ao goal primeiro. O ambiente e dedicado (nao reutiliza o parkour antigo) e nao usa parallel training.
+Three models (PPO, SAC, DQN) compete simultaneously to reach the goal first. The environment is dedicated (does not reuse the old parkour) and does not use parallel training.
 
-- Cena: `CompetitiveParkour.unity`
+- Scene: `CompetitiveParkour.unity`
 - Script: `CompetitiveParkourEnvironment.cs`
-- Agente: `MarioCompetitiveAgent.cs`
+- Agent: `MarioCompetitiveAgent.cs`
 
-**Caracteristicas:**
-- 3 Spawn Points configuraveis no Inspector
-- Cores e texturas customizadas por modelo (expostas no Inspector: `ppoColor`, `sacColor`, `dqnColor`)
-- HUD de vitorias na tela (UI) com contagem por modelo
-- Materiais runtime gerados automaticamente com base na cor configurada
+**Features:**
+- 3 configurable Spawn Points in the Inspector
+- Custom colors and textures per model (exposed in Inspector: `ppoColor`, `sacColor`, `dqnColor`)
+- On-screen victory HUD (UI) with per-model win counts
+- Runtime-generated materials based on configured color
 
-**Observacoes (42-dim):**
-| Campo | Indices | Valores |
-|-------|---------|---------|
-| Posicao (x,y,z) | 0-2 | [-1, 1] |
-| Direcao ao goal (x,y,z,dist) | 3-6 | [-1, 1] |
-| Velocidade (x,y,z) | 7-9 | [-1, 1] |
-| No ar? | 10 | {0, 1} |
-| Raycasts 8 direcoes | 11-26 | [0, 1] |
-| Raycast para baixo | 27 | [0, 1] |
-| Tempo / 45s | 28 | [0, 1] |
-| Ranking relativo | 29 | [0, 1] |
-| Rivais (3x4 obs) | 30-41 | [-1, 1] |
+**Observations (42-dim):**
+| Field | Indices | Values |
+|-------|---------|--------|
+| Position (x,y,z) | 0-2 | [-1, 1] |
+| Direction to goal (x,y,z,dist) | 3-6 | [-1, 1] |
+| Velocity (x,y,z) | 7-9 | [-1, 1] |
+| Airborne? | 10 | {0, 1} |
+| 8-direction raycasts | 11-26 | [0, 1] |
+| Downward raycast | 27 | [0, 1] |
+| Time / 45s | 28 | [0, 1] |
+| Relative ranking | 29 | [0, 1] |
+| Rivals (3x4 obs) | 30-41 | [-1, 1] |
 
 **Actions:**
-- `[0-1]` Joystick X/Y: [-1, 1] (continuo)
-- `[2]` Pular: {0, 1} (discreto)
-- `[3]` Chute/Soco: {0, 1} (discreto)
-- `[4]` Rasteira/Stomp: {0, 1} (discreto)
+- `[0-1]` Joystick X/Y: [-1, 1] (continuous)
+- `[2]` Jump: {0, 1} (discrete)
+- `[3]` Kick/Punch: {0, 1} (discrete)
+- `[4]` Slide/Stomp: {0, 1} (discrete)
+
+**Training:**
+```powershell
+# 1. Install dependencies
+pip install -r requirements.txt
+
+# 2. In Unity, open the CompetitiveParkour.unity scene and press Play
+
+# 3. Run training with TensorBoard and MLflow
+python train_competitive_sb3.py --time-scale 3.0 --tb-logdir ./tensorboard_logs
+
+# 4. Monitor metrics in real time (TensorBoard)
+tensorboard --logdir ./tensorboard_logs
+# Access in browser: http://localhost:6006
+
+# 5. Monitor models and parameters (MLflow)
+mlflow ui
+# Access in browser: http://localhost:5000
+```
+
+**Script Arguments:**
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--env` | Path to Unity executable (empty for Editor) | `None` |
+| `--run-id` | Run ID | timestamp |
+| `--resume` | Resume from saved checkpoints | `false` |
+| `--force` | Overwrite previous runs | `false` |
+| `--tb-logdir` | TensorBoard log directory | `./tensorboard_logs` |
+| `--time-scale` | Unity time scale | `3.0` |
+
+The script creates a `CompetitiveParkourEnv` (gym.Env) dedicated to this scene. It logs to MLflow: reward per episode, episode length, checkpoints every 50 episodes, and final models in ONNX.
 
 ---
 
-### 4. **Modo Team Battle**
+### 4. **Team Battle**
 
-Dois times de agentes cooperam/competem.
+Two teams of agents cooperate/compete using MA-POCA (Multi-Agent POsthumous Credit Assignment).
 
-- Cena: `TeamBattle.unity`
+- Scene: `TeamBattle.unity`
 - Script: `TeamBattleEnvironment.cs`
-- Agente: `TeamBattleAgent.cs`
+- Agent: `TeamBattleAgent.cs`
+- Config: `config/team_battle_poca.yaml`
 
 ---
 
-## Cenas Disponíveis
+### 5. **Chase Training (Pursuer vs Fugitive)**
 
-| Cena | Uso | Modo | Paralelo |
-|------|-----|------|----------|
-| **ParkourTraining.unity** | RL Padrão | 4 Marios paralelos | ✅ Sim |
-| **ParkourTraining_OldSystem.unity** | Sistema antigo | Backup | ❌ Não |
-| **HybridTraining.unity** | IL + Offline RL | Recording mode | ✅ Sim |
-| **CompetitiveParkour.unity** | Competicao 3 modelos | 1 PPO + 1 SAC + 1 DQN | ❌ Nao |
-| **TeamBattle.unity** | Team 2v2 | 4 Agentes | ✅ Sim |
-| **ChaseTraining.unity** | Perseguição 1v1 (SAC) | 2 Agentes (Pursuer + Fugitive) | ✅ Sim |
-
----
-
-## Instruções de Uso
-
-### Opção 1: Treino RL Tradicional (Parkour)
+Decentralized training with two SAC agents: a pursuer and a fugitive.
 
 ```powershell
 # Terminal 1
-cd libsm64-unity-dev
+.\train_chase.ps1
+
+# Terminal 2: In Unity
+1. Open ChaseTraining.unity
+2. Play
+3. Wait for automatic agent spawning
+```
+
+**Observations (31-dim):**
+| Field | Indices | Values |
+|-------|---------|--------|
+| Local position (x,y,z) | 0-2 | [-1, 1] |
+| Velocity (x,y,z) | 3-5 | [-1, 1] |
+| Grounded | 6 | {0, 1} |
+| Relative opponent (x,y,z,dist) | 7-10 | [-1, 1] |
+| Opponent velocity (x,y,z) | 11-13 | [-1, 1] |
+| Normalized time | 14 | [0, 1] |
+| Raycasts | 15-30 | [0, 1] |
+
+**Actions (5 continuous):**
+- `[0]` Joystick X: [-1, 1]
+- `[1]` Joystick Y: [-1, 1]
+- `[2]` Jump: [0, 1]
+- `[3]` Kick/Punch: [0, 1]
+- `[4]` Slide/Stomp: [0, 1]
+
+**Performance Note:** The SAC algorithm performs neural network updates every step. To prevent freezes, the config uses `time_scale: 1.0`, `steps_per_update: 4`, and `DecisionPeriod: 8`.
+
+---
+
+## Available Scenes
+
+| Scene | Purpose | Mode | Parallel |
+|-------|---------|------|----------|
+| **ParkourTraining.unity** | Standard RL | 4 Parallel Marios | Yes |
+| **ParkourTraining_OldSystem.unity** | Legacy system | Backup | No |
+| **HybridTraining.unity** | IL + Offline RL | Recording mode | Yes |
+| **CompetitiveParkour.unity** | 3-model competition | 1 PPO + 1 SAC + 1 DQN | No |
+| **TeamBattle.unity** | Team 2v2 | 4 Agents | Yes |
+| **ChaseTraining.unity** | 1v1 Chase (SAC) | 2 Agents (Pursuer + Fugitive) | Yes |
+
+---
+
+## Usage Instructions
+
+### Option 1: Traditional RL Training (Parkour)
+
+```powershell
+# Terminal 1
 mlagents-learn Assets/ParkourRL/Config/mario_parkour.yaml --run-id parkour_v1
 
 # Terminal 2
-# Abra ParkourTraining.unity no Unity → Play
-# Aguarde mensagem: "Agent initialized. Ready to accept experiences."
+# Open ParkourTraining.unity in Unity -> Play
+# Wait for message: "Agent initialized. Ready to accept experiences."
 ```
 
-**Progresso:**
-- Step 0-100k: Mario aprende a se mover
-- Step 100k-500k: Mario tenta pular plataformas
-- Step 500k+: Mario consegue completar o parkour
-
----
-
-### Treinamento CompetitiveParkour (SB3 + TensorBoard + MLOps)
-
-Treinamento simultaneo de PPO, SAC e DQN usando Stable-Baselines3 diretamente, com logs no TensorBoard e rastreamento MLflow.
+### Option 2: Recording Data (Recording Mode)
 
 ```powershell
-# 1. Instalar dependencias
-pip install -r requirements.txt
-
-# 2. No Unity, abra a cena CompetitiveParkour.unity e de Play
-
-# 3. Rodar o treinamento com TensorBoard e MLflow
-python train_competitive_sb3.py --time-scale 3.0 --tb-logdir ./tensorboard_logs
-
-# 4. Acompanhar metricas em tempo real (TensorBoard)
-tensorboard --logdir ./tensorboard_logs
-# Acesse no navegador: http://localhost:6006
-
-# 5. Acompanhar modelos e parametros (MLflow)
-mlflow ui
-# Acesse no navegador: http://localhost:5000
-```
-
-**Argumentos do script:**
-- `--env`: Caminho do executavel Unity (deixe vazio para Editor)
-- `--run-id`: ID da run (default: timestamp)
-- `--resume`: Retomar de checkpoints salvos
-- `--force`: Sobrescrever runs anteriores
-- `--tb-logdir`: Diretorio dos logs do TensorBoard (default: `./tensorboard_logs`)
-- `--time-scale`: Time scale da Unity (default: `3.0`)
-
-O script `train_competitive_sb3.py` cria um `CompetitiveParkourEnv` (gym.Env) dedicado a esta cena, sem reutilizar o ambiente do parkour antigo. Ele registra no MLflow: recompensa por episodio, comprimento do episodio, checkpoints a cada 50 episodios e modelos finais em ONNX.
-
----
-
-### Opção 2: Gravação de Dados (Recording Mode)
-
-```powershell
-# No Unity
-1. Abra Assets/ParkourRL/Scenes/HybridTraining.unity
-2. Na Hierarchy, selecione: ParkourEnvironment
-3. No Inspector, BackupParkourEnvironment: Startup Mode = Recording
+# In Unity
+1. Open Assets/ParkourRL/Scenes/HybridTraining.unity
+2. In the Hierarchy, select: ParkourEnvironment
+3. In Inspector, BackupParkourEnvironment: Startup Mode = Recording
 4. Play (Ctrl+P)
-5. Controle Mario com WASD + Espaço
-6. Complete o parkour (ou falhe)
-7. Episódio é salvo em: HybridTrainingData/hybrid_episodes_*.json
+5. Control Mario with WASD + Space
+6. Complete the parkour (or fail)
+7. Episode is saved to: HybridTrainingData/hybrid_episodes_*.json
 ```
 
-**Repetir:** Para gravar mais episódios, simplesmente jogue novamente.
+**Repeat:** To record more episodes, simply play again.
 
----
-
-### Opção 3: Treino com Dados Gravados
+### Option 3: Training with Recorded Data
 
 ```powershell
 cd python_trainers
 
-# Analisar dados
+# Analyze data
 python analyze_dataset.py --data ../HybridTrainingData/ --plots
 
 # Behavior Cloning
@@ -403,66 +471,51 @@ python train_offline_rl.py \
     --output models/cql_mario.pth
 ```
 
-**Saída:**
-- `models/bc_mario.pth` - Modelo treinado (Behavior Cloning)
-- `models/cql_mario.pth` - Modelo treinado (Offline RL)
-- Gráficos de treinamento em `plots/`
+**Output:**
+- `models/bc_mario.pth` - Trained model (Behavior Cloning)
+- `models/cql_mario.pth` - Trained model (Offline RL)
+- Training plots in `plots/`
 
----
-
-### Opção 4: Modo Híbrido (Player + AI lado a lado)
+### Option 4: Hybrid Mode (Player + AI side by side)
 
 ```powershell
 # Terminal 1
 .\train_hybrid.ps1
 
-# Terminal 2: No Unity
-1. Abra HybridTraining.unity
+# Terminal 2: In Unity
+1. Open HybridTraining.unity
 2. Play
-3. Player Mario (verde) = WASD + Espaço
-4. AI Mario (azul) = ML-Agents (treina em tempo real)
-5. Pressione M para alternar entre Training/Recording
+3. Player Mario (green) = WASD + Space
+4. AI Mario (blue) = ML-Agents (trains in real time)
+5. Press M to toggle between Training/Recording
 ```
 
 ---
 
-### Opção 5: Treino Chase (Pursuer vs Fugitive - SAC)
+## MLOps Integration
 
-Treinamento descentralizado com dois agentes SAC: um perseguidor e um fugitivo.
+All training scripts integrate with **MLflow** for experiment tracking:
 
 ```powershell
-# Terminal 1
-.\train_chase.ps1
+# Automatically track metrics
+python trainer_mlflow.py --run-id mario_parkour_run1
 
-# Terminal 2: No Unity
-1. Abra ChaseTraining.unity
-2. Play
-3. Aguarde o spawn automático dos agents
+# View dashboard
+mlflow ui
+# Access: http://localhost:5000
 ```
 
-**Observações (31-dim):**
-| Campo | Índices | Valores |
-|-------|---------|---------|
-| Posição local (x,y,z) | 0-2 | [-1, 1] |
-| Velocidade (x,y,z) | 3-5 | [-1, 1] |
-| Grounded | 6 | {0, 1} |
-| Oponente relativo (x,y,z,dist) | 7-10 | [-1, 1] |
-| Velocidade oponente (x,y,z) | 11-13 | [-1, 1] |
-| Tempo normalizado | 14 | [0, 1] |
-| Raycasts | 15-30 | [0, 1] |
-
-**Actions (5 continuous):**
-- `[0]` Joystick X: [-1, 1]
-- `[1]` Joystick Y: [-1, 1]
-- `[2]` Pular: [0, 1]
-- `[3]` Chute/Soco: [0, 1]
-- `[4]` Rasteira/Stomp: [0, 1]
-
-**Nota de performance:** O algoritmo SAC faz updates da rede neural a cada passo. Para evitar congelamentos, a configuração usa `time_scale: 1.0`, `steps_per_update: 4` e `DecisionPeriod: 8`.
+**What is tracked:**
+- Hyperparameters (learning rate, batch size, network architecture)
+- Per-episode rewards and episode lengths
+- Model checkpoints (ZIP and ONNX) every 50 episodes
+- Final trained models
+- Configuration files as artifacts
+- TensorBoard logs
 
 ---
 
-## API e Componentes
+## API Reference
 
 ### BackupParkourEnvironment.cs
 
@@ -471,31 +524,31 @@ Treinamento descentralizado com dois agentes SAC: um perseguidor e um fugitivo.
 public enum StartupMode { Training = 0, Recording = 1 }
 ```
 
-**Propriedades:**
+**Properties:**
 ```csharp
-public Transform marioSpawnPointPublic { get; }  // Spawn do player
-public Transform goalPublic { get; }              // Target objetivo
+public Transform marioSpawnPointPublic { get; }  // Player spawn
+public Transform goalPublic { get; }              // Target goal
 ```
 
-**Métodos:**
+**Methods:**
 ```csharp
-public float[] CollectObservationVector()  // Retorna 30-dim obs
-public void ResetEnvironment()              // Reset do episódio
-public void SetStartupMode(StartupMode mode)  // Muda modo
+public float[] CollectObservationVector()  // Returns 30-dim obs
+public void ResetEnvironment()              // Episode reset
+public void SetStartupMode(StartupMode mode)  // Change mode
 ```
 
 ### HybridDataRecorder.cs
 
-**Métodos Públicos:**
+**Public Methods:**
 ```csharp
-void StartEpisode()  // Inicia novo episódio
+void StartEpisode()  // Start new episode
 void RecordStep(float[] obs, float[] actions, float reward, 
-                float[] nextObs, bool done)  // Grava um passo
-void SaveEpisode(Transition[] transitions, bool success)  // Salva episódio
-void FlushBatch()  // Força salvamento em disco
+                float[] nextObs, bool done)  // Record one step
+void SaveEpisode(Transition[] transitions, bool success)  // Save episode
+void FlushBatch()  // Force flush to disk
 ```
 
-**Eventos:**
+**Events:**
 ```csharp
 event Action OnEpisodeStarted
 event Action<bool> OnEpisodeEnded  // bool = success
@@ -513,7 +566,7 @@ python analyze_dataset.py \
 ```
 
 **train_behavior_cloning.py:**
-```python
+```bash
 python train_behavior_cloning.py \
     --data HybridTrainingData/ \
     --epochs 100 \
@@ -524,10 +577,10 @@ python train_behavior_cloning.py \
 ```
 
 **train_offline_rl.py:**
-```python
+```bash
 python train_offline_rl.py \
     --data HybridTrainingData/ \
-    --algo CQL  # ou IQL
+    --algo CQL  # or IQL
     --epochs 50 \
     --learning-rate 0.0003 \
     --output models/offline.pth
@@ -535,9 +588,9 @@ python train_offline_rl.py \
 
 ---
 
-## Configuração Avançada
+## Configuration
 
-### YAML ML-Agents (mario_parkour_hybrid.yaml)
+### ML-Agents YAML (mario_parkour_hybrid.yaml)
 
 ```yaml
 behaviors:
@@ -566,18 +619,26 @@ behaviors:
     threaded: true
 ```
 
-### MLOps (MLflow)
+### Requirements
 
-```powershell
-# Rastrear metricas automaticamente
-python trainer_mlflow.py --run-id mario_parkour_run1
-
-# Visualizar painel
-mlflow ui
-# Acesse: http://localhost:5000
+```
+mlflow>=2.0.0
+mlagents==0.28.0
+mlagents-envs==0.28.0
+torch>=1.11.0
+stable-baselines3>=2.0.0
+gymnasium>=0.28.0
+shimmy>=1.0.0
+protobuf<=3.20.3
+onnx
+pyyaml
+tensorboard>=2.12.0
+numpy>=1.21.0
 ```
 
-### Docker
+---
+
+## Docker
 
 ```bash
 # Build
@@ -585,85 +646,88 @@ docker build -t mariorl:latest .
 
 # Run
 docker run -it --rm -v ${PWD}/results:/app/results \
-    mariorl:latest python trainer_mlflow.py --run-id dockerrun
+    mariorl:latest python train_mlops.py --run-id dockerrun
 ```
 
 ---
 
 ## Troubleshooting
 
-### Problema: "Nenhum arquivo JSON encontrado"
+### Problem: "No JSON files found"
 
-**Solução:**
-1. Verifique se executou em Recording mode
-2. Confirmepasta `HybridTrainingData/` existe
-3. Rode pelo menos 1 episódio completo (até 30s ou queda)
+**Solution:**
+1. Verify you ran in Recording mode
+2. Confirm the `HybridTrainingData/` folder exists
+3. Run at least 1 complete episode (up to 30s or fall)
 
-### Problema: "Error: No agent found"
+### Problem: "Error: No agent found"
 
-**Solução:**
+**Solution:**
 ```powershell
-# Terminal 1: Iniciar trainer
+# Terminal 1: Start trainer
 mlagents-learn Assets/ParkourRL/Config/mario_parkour.yaml --run-id parkour_v1
 
-# Terminal 2: DEPOIS fazer Play no Unity (aguarde 3s)
+# Terminal 2: THEN press Play in Unity (wait 3s)
 ```
 
-### Problema: "ROM não encontrada"
+### Problem: "ROM not found"
 
-**Solução:**
-1. Verifique arquivo: `baserom.us.z64`
-2. Confirme MD5: `20b854b239203baf6c961b850a4a51a2`
-3. Coloque na raiz do projeto
+**Solution:**
+1. Verify file: `baserom.us.z64`
+2. Confirm MD5: `20b854b239203baf6c961b850a4a51a2`
+3. Place in project root
 
-### Problema: "Python module not found"
+### Problem: "Python module not found"
 
-**Solução:**
+**Solution:**
 ```bash
 pip install -r requirements.txt
-# ou
+# or
 pip install mlagents==0.28.0 torch numpy scikit-learn matplotlib
 ```
 
-### Problema: "ModuleNotFoundError: No module named 'mlagents_envs'"
+### Problem: "ModuleNotFoundError: No module named 'mlagents_envs'"
 
-**Solução:**
+**Solution:**
 ```powershell
 # Windows
 pip install --upgrade ml-agents==0.28.0 ml-agents-envs==0.28.0
 
-# ou use venv
+# or use venv
 .\setup_python39.ps1
 ```
 
-### Problema: "Unity congela durante treino ChaseTraining (SAC)"
+### Problem: "Unity freezes during ChaseTraining (SAC)"
 
-**Causa:** SAC com `steps_per_update: 1` faz updates da rede neural a cada step do ambiente. Com `time_scale` alto, o Python trainer não consegue acompanhar a Unity e fica bloqueado em `DecideAction`.
+**Cause:** SAC with `steps_per_update: 1` performs neural network updates every environment step. With a high `time_scale`, the Python trainer cannot keep up with Unity and gets blocked in `DecideAction`.
 
-**Solução (já aplicada na config):**
-- `steps_per_update: 4` — reduz frequência de updates da rede
-- `time_scale: 1.0` — diminui velocidade de simulação
-- `DecisionPeriod: 8` — reduz requisições de decisão por segundo
-- `batch_size: 512` — aproveita melhor o hardware em cada update
+**Solution (already applied in config):**
+- `steps_per_update: 4` -- reduces network update frequency
+- `time_scale: 1.0` -- lowers simulation speed
+- `DecisionPeriod: 8` -- reduces decision requests per second
+- `batch_size: 512` -- better hardware utilization per update
 
-Se ainda congelar, reduza ainda mais o `time_scale` ou aumente `steps_per_update`.
+If it still freezes, further reduce `time_scale` or increase `steps_per_update`.
 
 ---
 
-## Referências
+## References
 
 - **ML-Agents**: https://github.com/Unity-Technologies/ml-agents
 - **libsm64-unity**: https://github.com/libsm64/libsm64-unity
+- **Stable-Baselines3**: https://stable-baselines3.readthedocs.io/
 - **PyTorch**: https://pytorch.org/
 - **MLflow**: https://mlflow.org/
+- **Gymnasium**: https://gymnasium.farama.org/
 
 ---
 
-## Licença
+## License
 
-Este projeto utiliza:
+This project uses:
 - libsm64-unity (MIT)
 - ML-Agents Toolkit (Apache 2.0)
 - PyTorch (BSD)
+- Stable-Baselines3 (MIT)
 
-Verifique os respectivos repositórios para detalhes de licença.
+Check the respective repositories for license details.

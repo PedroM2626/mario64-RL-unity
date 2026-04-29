@@ -7,7 +7,7 @@ using Unity.MLAgents.Actuators;
 namespace ParkourRL
 {
     /// <summary>
-    /// Ambiente 1v1 de perseguição: um perseguidor precisa atingir o fugitivo
+    /// 1v1 chase environment: a pursuer must reach the fugitive
     /// com golpes (soco/chute/rasteira), enquanto o fugitivo tenta sobreviver.
     /// Treino descentralizado com duas policies SAC.
     /// </summary>
@@ -37,11 +37,11 @@ namespace ParkourRL
         [SerializeField] private float minimumSpawnSeparation = 6f;
 
         [Header("Combat Settings")]
-        [Tooltip("Distância máxima para um ataque (kick/stomp) acertar o oponente.")]
+        [Tooltip("Maximum distance for an attack (kick/stomp) to hit the opponent.")]
         [SerializeField] private float attackDistance = 2.5f;
-        [Tooltip("Distância máxima para um kick acertar (ligeiramente menor que stomp).")]
+        [Tooltip("Maximum distance for a kick to hit (slightly smaller than stomp).")]
         [SerializeField] private float kickHitDistance = 2f;
-        [Tooltip("Força de knockback aplicada no fugitivo ao ser atingido.")]
+        [Tooltip("Knockback force applied to fugitive when hit.")]
         [SerializeField] private float knockbackForce = 5f;
 
         [Header("Visual")]
@@ -94,7 +94,7 @@ namespace ParkourRL
                 ResolveTimeout();
             }
 
-            // Limpar flags de ataque após o processamento deste frame
+            // Limpar flags de ataque after o processamento deste frame
             pursuer?.ClearAttackFlags();
             fugitive?.ClearAttackFlags();
         }
@@ -173,7 +173,7 @@ namespace ParkourRL
                 fugitive.ResetForNewEpisode();
                 if (enableEpisodeLogs)
                 {
-                    Debug.Log($"[ChaseTraining] Episodio iniciado: Pursuer vs Fugitive. Distancia inicial={(Vector3.Distance(pursuerSpawnPos, fugitiveSpawnPos)):F2}");
+                    Debug.Log($"[ChaseTraining] Episodio started: Pursuer vs Fugitive. Distancia inicial={(Vector3.Distance(pursuerSpawnPos, fugitiveSpawnPos)):F2}");
                 }
             }
         }
@@ -377,11 +377,11 @@ namespace ParkourRL
 
             float dist = Vector3.Distance(pursuer.transform.position, fugitive.transform.position);
 
-            // O pursuer só vence se executar um ataque (kick ou stomp) E estiver próximo o suficiente
+            // The pursuer only wins if executing an attack (kick or stomp) AND is close enough
             bool attackLanded = false;
             if (dist <= attackDistance && pursuer.attackExecutedThisFrame)
             {
-                // Kick precisa estar mais próximo que stomp
+                // Kick precisa estar mais next que stomp
                 if (pursuer.lastKickPressed && dist <= kickHitDistance)
                     attackLanded = true;
                 if (pursuer.lastStompPressed && dist <= attackDistance)

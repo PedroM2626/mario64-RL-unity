@@ -1,119 +1,87 @@
-# Quick Start - Hybrid Training
+# Quick Start Guide - Hybrid Training System
 
-## 🚀 Começar em 3 Passos
+## Getting Started in 3 Steps
 
-### 1. Criar a Cena
+### 1. Build the Scene
+In Unity, go to: **Tools > ParkourRL > Build Hybrid Scene**
 
-No Unity Editor:
-```
-Menu: ParkourRL > Build Hybrid Training Scene
-```
+This creates:
+- A hybrid environment with all components
+- Split-screen cameras
+- Spawn points and goal
 
-Isso cria automaticamente:
-- 5 plataformas de parkour
-- 2 pontos de spawn (Player e AI)
-- Ambiente híbrido com todos os componentes
-- Câmeras split-screen
-- UI de controle
+### 2. Configure (if needed)
+Select `HybridEnvironment` in the Hierarchy:
+- **marioSpawnPoint**: Where Marios spawn
+- **goal**: Target destination
+- **marioSeparation**: Distance between the two Marios
 
-### 2. Configurar (se necessário)
+### 3. Play
+1. Press Play (Ctrl+P)
+2. Use `M` to toggle between Training/Recording modes
+3. In Recording mode: play with WASD + Space
 
-```
-Menu: ParkourRL > Setup Hybrid Scene References
-```
+## Controls
 
-Verifique no Inspector do **HybridEnvironment**:
-- Goal → GoalPlatform
-- Player Spawn Point → PlayerSpawn
-- AI Spawn Point → AISpawn
+| Key | Action |
+|-----|--------|
+| **WASD** | Move |
+| **Space** | Jump |
+| **M** | Toggle mode |
+| **ESC** | Pause |
 
-### 3. Executar
+## Operation Modes
 
-Pressione **Play** no Unity!
+### Training Mode (Default)
+- AI Mario trains via ML-Agents (PPO)
+- Player Mario can be controlled for comparison
 
----
+### Recording Mode
+- Player Mario records demonstrations
+- Data saved to `HybridTrainingData/`
+- Used for Behavior Cloning and Offline RL
 
-## 🎮 Controles
-
-| Tecla | Ação |
-|-------|------|
-| **WASD / Setas** | Mover Mario Player (verde) |
-| **Espaço** | Pular |
-| **M** | Alternar modo (Training/Recording) |
-| **P** | Pausar |
-
----
-
-## 📊 Modos de Operação
-
-### Training Mode (Azul)
-- AI Mario treina com ML-Agents
-- Player Mario pode ser controlado para comparação
-- Execute: `train_hybrid.bat`
-
-### Recording Mode (Vermelho)
-- Player Mario grava demonstrações
-- Dados salvos em: `HybridTrainingData/`
-- Use para: Behavior Cloning, CQL, IQL
-
----
-
-## 🐍 Treinar Modelos Python
+## After Recording
 
 ```bash
 cd python_trainers
 
-# Analisar dados
+# Analyze the data
 python analyze_dataset.py --data ../HybridTrainingData/ --plots
 
-# Behavior Cloning
-python train_behavior_cloning.py --data ../HybridTrainingData/ --output models/bc.pth
+# Train Behavior Cloning
+python train_behavior_cloning.py --data ../HybridTrainingData/ --epochs 100
 
-# Offline RL (CQL)
-python train_offline_rl.py --data ../HybridTrainingData/ --algo CQL --output models/cql.pth
+# Train Offline RL (CQL)
+python train_offline_rl.py --data ../HybridTrainingData/ --algo CQL
 ```
 
----
+## File Locations
 
-## 📁 Onde Estão os Arquivos?
+| Type | Location |
+|------|----------|
+| Recorded data | `HybridTrainingData/` |
+| BC models | `python_trainers/models/` |
+| Scenes | `Assets/ParkourRL/Scenes/` |
+| Configs | `Assets/ParkourRL/Config/` |
 
-| Tipo | Localização |
-|------|-------------|
-| Scripts C# | `Assets/ParkourRL/Scripts/HybridSystem/` |
-| Config ML-Agents | `Assets/ParkourRL/Config/mario_parkour_hybrid.yaml` |
-| Scripts Python | `python_trainers/` |
-| Dados gravados | `HybridTrainingData/` (criado automaticamente) |
-| Cena | `Assets/ParkourRL/Scenes/HybridTraining.unity` |
+## Troubleshooting
 
----
+### "Cameras not appearing"
+- Ensure cameras were created via the scene builder
+- Check the Hierarchy for `PlayerCamera` and `AICamera`
 
-## ❓ Troubleshooting
+### "Data not being recorded"
+- Set mode to Recording (press M)
+- Check that `HybridTrainingData/` directory exists
+- Console should show: "[HybridRecorder] Episode X started"
 
-### "Menu ParkourRL não aparece"
-- Verifique se os scripts compilaram sem erros
-- Console Window: `Ctrl+Shift+C`
+### "ML-Agents not connecting"
+- Start `mlagents-learn` before pressing Play in Unity
+- Config: `mario_parkour_hybrid.yaml`
 
-### "Câmeras não aparecem"
-- Certifique-se de que as câmeras foram criadas
-- Check `GameObject > Cameras` na hierarquia
+## Full Documentation
+- [README_HYBRID.md](README_HYBRID.md) - Full system documentation
+- [HybridSceneSetup.md](HybridSceneSetup.md) - Scene setup details
 
-### "Dados não estão sendo gravados"
-- Verifique se está em **Recording Mode** (tecla M)
-- Check se o diretório `HybridTrainingData/` existe
-- Console deve mostrar: "[HybridRecorder] Episódio X iniciado"
-
-### "Player Mario não se move"
-- Certifique-se de que a janela do Game está focada
-- Verifique se não está em pausa (tecla P)
-
----
-
-## 📚 Documentação Completa
-
-- [Setup Detalhado](HybridSceneSetup.md)
-- [README do Sistema](README_HYBRID.md)
-- [Python Trainers](../python_trainers/README.md)
-
----
-
-**Pronto para começar! Pressione Play e divirta-se! 🎮**
+**Ready to start! Press Play and enjoy!**

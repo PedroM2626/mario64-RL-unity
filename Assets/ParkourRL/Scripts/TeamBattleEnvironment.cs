@@ -19,36 +19,36 @@ namespace ParkourRL
         [Header("Mario Setup")]
         [SerializeField] private GameObject marioPrefab;
         [SerializeField] private Material baseMarioMaterial;
-        [Tooltip("Material específico para o Time A. Se vazio, usa baseMarioMaterial com a cor do time.")]
+        [Tooltip("Specific material for Team A. If empty, uses baseMarioMaterial with team color.")]
         [SerializeField] private Material teamAMaterial;
-        [Tooltip("Material específico para o Time B. Se vazio, usa baseMarioMaterial com a cor do time.")]
+        [Tooltip("Specific material for Team B. If empty, uses baseMarioMaterial with team color.")]
         [SerializeField] private Material teamBMaterial;
 
         [Header("Warm Start")]
-        [Tooltip("Usa um modelo base para warm-start do Mario no BehaviorParameters.")]
+        [Tooltip("Uses a base model for warm-starting Mario in BehaviorParameters.")]
         [SerializeField] private bool useWarmStartModel = false;
         [SerializeField] private NNModel warmStartModel;
-        [Tooltip("Caminho do asset para auto-carregar o modelo no editor quando o campo acima estiver vazio.")]
+        [Tooltip("Asset path to auto-load the model in the editor when the field above is empty.")]
         [SerializeField] private string warmStartModelAssetPath = "";
 
         [Header("Arena Setup")]
         [SerializeField] private Transform[] teamASpawnPoints;  // 5 spawn points para Time A
         [SerializeField] private Transform[] teamBSpawnPoints;  // 5 spawn points para Time B
         [SerializeField] private Transform arenaCenter;         // Centro da arena (para verificar limites)
-        [SerializeField] private float arenaRadius = 30f;       // Raio da arena válida
+        [SerializeField] private float arenaRadius = 30f;       // Valid arena radius
 
         [Header("Battle Settings")]
         [SerializeField] private int marioPerTeam = 5;
-        [SerializeField] private float maxBattleTime = 120f;    // Tempo máximo de batalha
+        [SerializeField] private float maxBattleTime = 120f;    // Maximum battle time
         [SerializeField] private float marioHealth = 100f;      // Vida inicial de cada Mario
         [SerializeField] private float kickDamage = 20f;        // Dano de um chute
         [SerializeField] private float stompDamage = 15f;       // Dano de um stompo
-        [SerializeField] private float knockbackForce = 5f;     // Força de knockback ao ser atingido
+        [SerializeField] private float knockbackForce = 5f;     // Knockback force when hit
 
         [Header("Team Colors")]
-        [Tooltip("Cor do Time A (default = vermelho). Deixe como (0,0,0,0) para usar o padrão vermelho.")]
+        [Tooltip("Team A color (default = red). Leave as (0,0,0,0) to use default red.")]
         [SerializeField] private Color teamAColor = Color.red;
-        [Tooltip("Cor do Time B (default = azul claro). Deixe como (0,0,0,0) para usar o padrão azul claro.")]
+        [Tooltip("Team B color (default = light blue). Leave as (0,0,0,0) to use default light blue.")]
         [SerializeField] private Color teamBColor = new Color(0, 0.7f, 1f);
 
         // Estruturas internas
@@ -97,10 +97,10 @@ namespace ParkourRL
             // Garantir MeshColliders em todo terreno
             EnsureAllMeshColliders();
 
-            // Recarregar terreno SM64
+            // Reload SM64 terrain
             SM64Context.RefreshStaticTerrain();
 
-            // Spawnar todos os Marios (apenas uma vez)
+            // Spawn all Marios (apenas uma vez)
             if (!hasSpawned)
             {
                 hasSpawned = true;
@@ -114,19 +114,19 @@ namespace ParkourRL
         {
             if (!battleActive) return;
 
-            // Verificar vitória: um time foi eliminado
+            // Check for victory: a team was eliminated
             if (agentsByTeam[0].Count == 0 || agentsByTeam[1].Count == 0)
             {
                 EndBattle();
             }
 
-            // Verificar timeout
+            // Check timeout
             if (Time.time - battleStartTime > maxBattleTime)
             {
                 EndBattle();
             }
 
-            // Detectar e processar colisões de combate
+            // Detect and process combat collisions
             ProcessCombatCollisions();
         }
 
@@ -157,7 +157,7 @@ namespace ParkourRL
                 #endif
                 if (marioPrefab == null)
                 {
-                    Debug.LogError("[TeamBattleEnv] Mario prefab não encontrado!");
+                    Debug.LogError("[TeamBattleEnv] Mario prefab not found!");
                     return;
                 }
             }
@@ -292,7 +292,7 @@ namespace ParkourRL
                 }
             }
 
-            // Collider para detecção de combate
+            // Collider for combat detection
             SphereCollider combatCollider = marioObj.AddComponent<SphereCollider>();
             combatCollider.radius = 1.5f;
             combatCollider.isTrigger = true;
@@ -341,7 +341,7 @@ namespace ParkourRL
         }
 
         /// <summary>
-        /// Processa colisões de combate: verifica Kicks e Stomps entre inimigos
+        /// Processes combat collisions: checks Kicks and Stomps between enemies
         /// </summary>
         private void ProcessCombatCollisions()
         {
@@ -359,9 +359,9 @@ namespace ParkourRL
                 {
                     if (defender == null || !defender.isActiveAndEnabled) continue;
 
-                    // Verificar distância para possível impacto
+                    // Check distance for possible impact
                     float dist = Vector3.Distance(attacker.transform.position, defender.transform.position);
-                    if (dist < 2.5f) // Distância de impacto
+                    if (dist < 2.5f) // Impact distance
                     {
                         if (attacker.lastKickPressed && dist < 2f)
                         {
@@ -463,7 +463,7 @@ namespace ParkourRL
 
             // Desativar imediatamente para que outros agentes nao tentem acessar
             agent.gameObject.SetActive(false);
-            // Destruir após um delay para limpeza
+            // Destroy after a delay for cleanup
             Destroy(agent.gameObject, 0.2f);
         }
 
@@ -527,7 +527,7 @@ namespace ParkourRL
                 Debug.Log($"[TeamBattle] EMPATE! Tempo: {timeElapsed:F1}s");
             }
 
-            // Finalizar episódios individuais restantes (agentes ainda vivos)
+            // End remaining individual episodes (agents still alive)
             foreach (var team in agentsByTeam)
             {
                 foreach (var agent in team)
@@ -591,7 +591,7 @@ namespace ParkourRL
         }
 
         /// <summary>
-        /// Verifica se um Mario está fora da arena
+        /// Checks if a Mario is outside the arena
         /// </summary>
         public bool IsOutOfBounds(Vector3 position)
         {

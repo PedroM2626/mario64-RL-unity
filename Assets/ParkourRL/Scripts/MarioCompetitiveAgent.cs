@@ -8,9 +8,9 @@ using System.Collections.Generic;
 namespace ParkourRL
 {
     /// <summary>
-    /// Agente Mario competitivo: compete contra outros Marios no mesmo mapa.
-    /// Pode socar (Kick/B), chutar (Stomp/Z) e atropelar outros agentes.
-    /// Recompensas baseadas em posicao relativa, velocidade e combate.
+    /// Competitive Mario agent: competes against other Marios on the same map.
+    /// Can punch (Kick/B), stomp (Stomp/Z) and run over other agents.
+    /// Rewards based on relative position, speed and combat.
     /// </summary>
     public class MarioCompetitiveAgent : Agent
     {
@@ -43,9 +43,9 @@ namespace ParkourRL
         private float episodeTime;
         private float bestCompletionTime;
         private bool hasFinished = false;
-        private int ranking = 0; // 0 = nao terminou, 1 = primeiro, etc.
+        private int ranking = 0; // 0 = not finished, 1 = primeiro, etc.
 
-        private const float MAX_EPISODE_TIME = 45f; // Mais tempo para competicao
+        private const float MAX_EPISODE_TIME = 45f; // More time for competition
         private RaycastHit[] raycastHitsCache = new RaycastHit[1];
 
         // Fallback: detecta se OnActionReceived nunca foi chamado (sem trainer)
@@ -56,7 +56,7 @@ namespace ParkourRL
         private float randomActionTimer = 0f;
         private const float RANDOM_ACTION_INTERVAL = 0.3f;
 
-        // Referencia a outros agentes no mesmo ambiente
+        // Reference to other agents in the same environment
         private List<MarioCompetitiveAgent> rivals = new List<MarioCompetitiveAgent>();
 
         void Awake()
@@ -69,13 +69,13 @@ namespace ParkourRL
         new void OnEnable()
         {
             base.OnEnable();
-            Debug.Log($"[{name}] OnEnable chamado - BehaviorParameters: {GetComponent<Unity.MLAgents.Policies.BehaviorParameters>() != null}");
+            Debug.Log($"[{name}] OnEnable called - BehaviorParameters: {GetComponent<Unity.MLAgents.Policies.BehaviorParameters>() != null}");
         }
         
         new void OnDisable()
         {
             base.OnDisable();
-            Debug.Log($"[{name}] OnDisable chamado");
+            Debug.Log($"[{name}] OnDisable called");
         }
 
         public override void Initialize()
@@ -83,14 +83,14 @@ namespace ParkourRL
             base.Initialize();
             ResetInputs();
             
-            // Garantir que o BehaviorParameters tenha o tamanho de observacao correto (42)
+            // Ensure BehaviorParameters has the correct observation size (42)
             var bp = GetComponent<Unity.MLAgents.Policies.BehaviorParameters>();
             if (bp != null && bp.BrainParameters.VectorObservationSize != 42)
             {
                 bp.BrainParameters.VectorObservationSize = 42;
-                Debug.Log($"[{name}] VectorObservationSize corrigido para 42");
+                Debug.Log($"[{name}] VectorObservationSize corrected to 42");
             }
-            Debug.Log($"[{name}] Initialize concluido. BehaviorName: {(bp != null ? bp.BehaviorName : "null")}");
+            Debug.Log($"[{name}] Initialize completed. BehaviorName: {(bp != null ? bp.BehaviorName : "null")}");
         }
 
         public override void OnEpisodeBegin()
@@ -139,19 +139,19 @@ namespace ParkourRL
             }
         }
 
-        // ===== OBSERVACOES: 30 + 12 (rivais) = 42 obs =====
+        // ===== OBSERVATIONS: 30 + 12 (rivals) = 42 obs =====
         public override void CollectObservations(VectorSensor sensor)
         {
             Vector3 position = transform.position;
             Vector3 envOffset = competitiveEnv != null ? competitiveEnv.transform.position : Vector3.zero;
             Vector3 localPosition = position - envOffset;
 
-            // [3 obs] Posicao do Mario (normalizada e relativa)
+            // [3 obs] Mario position (normalized and relative)
             sensor.AddObservation(localPosition.x / 25f);
             sensor.AddObservation(localPosition.y / 10f);
             sensor.AddObservation(localPosition.z / 25f);
 
-            // [4 obs] Direcao e distancia ao objetivo
+            // [4 obs] Direction and distance to goal
             if (targetGoal != null)
             {
                 Vector3 toGoal = targetGoal.position - position;
@@ -168,17 +168,17 @@ namespace ParkourRL
                 sensor.AddObservation(0f);
             }
 
-            // [3 obs] Velocidade do Mario
+            // [3 obs] Mario velocity
             Vector3 velocity = (position - previousPosition) / Mathf.Max(Time.fixedDeltaTime, 0.001f);
             sensor.AddObservation(Mathf.Clamp(velocity.x / 10f, -1f, 1f));
             sensor.AddObservation(Mathf.Clamp(velocity.y / 10f, -1f, 1f));
             sensor.AddObservation(Mathf.Clamp(velocity.z / 10f, -1f, 1f));
 
-            // [1 obs] Esta no ar?
+            // [1 obs] Is airborne?
             bool isGrounded = Physics.RaycastNonAlloc(position + Vector3.up * 0.1f, Vector3.down, raycastHitsCache, 0.5f) > 0;
             sensor.AddObservation(isGrounded ? 0f : 1f);
 
-            // [16 obs] Raycasts para detectar terreno/obstaculos/rivais
+            // [16 obs] Raycasts to detect terrain/obstacles/rivals
             for (int i = 0; i < raycastCount; i++)
             {
                 float angle = (360f / raycastCount) * i;
@@ -196,7 +196,7 @@ namespace ParkourRL
                 }
             }
 
-            // [1 obs] Altura do chao abaixo
+            // [1 obs] Ground height below
             if (Physics.RaycastNonAlloc(position + Vector3.up * 0.5f, Vector3.down, raycastHitsCache, 20f) > 0)
             {
                 sensor.AddObservation(raycastHitsCache[0].distance / 20f);
@@ -206,15 +206,15 @@ namespace ParkourRL
                 sensor.AddObservation(1f);
             }
 
-            // [1 obs] Tempo normalizado
+            // [1 obs] Normalized time
             sensor.AddObservation(episodeTime / MAX_EPISODE_TIME);
 
-            // [1 obs] Posicao relativa no ranking (0=ultimo, 1=primeiro)
+            // [1 obs] Relative ranking position (0=last, 1=first)
             float myRank = GetCurrentRanking();
             sensor.AddObservation(myRank);
 
-            // [12 obs] Informacoes sobre ate 3 rivais mais proximos (4 obs cada)
-            // Para cada rival: [direcaoX, direcaoZ, distancia, diferencaProgresso]
+            // [12 obs] Information about up to 3 closest rivals (4 obs each)
+            // For each rival: [directionX, directionZ, distance, progressDifference]
             List<MarioCompetitiveAgent> sortedRivals = new List<MarioCompetitiveAgent>(rivals);
             sortedRivals.Sort((a, b) => 
                 Vector3.Distance(position, a.transform.position).CompareTo(
@@ -229,7 +229,7 @@ namespace ParkourRL
                     sensor.AddObservation(toRival.x / 25f);
                     sensor.AddObservation(toRival.z / 25f);
                     sensor.AddObservation(Mathf.Clamp(rivalDist / 20f, 0, 1));
-                    // Progresso relativo: positivo = rival esta mais perto do goal que eu
+                    // Relative progress: positive = rival is closer to goal than me
                     float rivalGoalDist = sortedRivals[i].GetDistanceToGoal();
                     float progressDiff = (GetDistanceToGoal() - rivalGoalDist) / Mathf.Max(initialDistanceToGoal, 0.1f);
                     sensor.AddObservation(Mathf.Clamp(progressDiff, -1f, 1f));
@@ -251,43 +251,47 @@ namespace ParkourRL
         
         public override void OnActionReceived(ActionBuffers actions)
         {
-            if (hasFinished) return;
-            
+            Debug.Log($"[{name}] OnActionReceived TRIGGERED!");
+            if (hasFinished) 
+            {
+                Debug.Log($"[{name}] OnActionReceived ignored because hasFinished is true!");
+                return;
+            }
             actionReceivedThisEpisode = true;
             
-            // Se estava usando fallback, desativar
+            // If was using fallback, deactivate
             if (usingFallbackActions)
             {
                 usingFallbackActions = false;
-                Debug.Log($"[{name}] Trainer conectado! Desativando fallback.");
+                Debug.Log($"[{name}] Trainer connected! Deactivating fallback.");
             }
             
-            // Log na primeira vez que recebe acao
+            // Log on first action received
             if (!firstActionReceived)
             {
-                Debug.Log($"[{name}] PRIMEIRA ACAO RECEBIDA! Continuous: [{actions.ContinuousActions[0]:F2}, {actions.ContinuousActions[1]:F2}], Discrete: [{actions.DiscreteActions[0]}, {actions.DiscreteActions[1]}, {actions.DiscreteActions[2]}]");
+                Debug.Log($"[{name}] FIRST ACTION RECEIVED! Continuous: [{actions.ContinuousActions[0]:F2}, {actions.ContinuousActions[1]:F2}], Discrete: [{actions.DiscreteActions[0]}, {actions.DiscreteActions[1]}, {actions.DiscreteActions[2]}]");
                 firstActionReceived = true;
             }
 
-            // Acoes continuas: joystick
+            // Continuous actions: joystick
             joystickInput = new Vector2(
                 Mathf.Clamp(actions.ContinuousActions[0], -1f, 1f),
                 Mathf.Clamp(actions.ContinuousActions[1], -1f, 1f)
             );
 
-            // Acoes discretas: [0] Jump, [1] Kick/Punch, [2] Stomp
+            // Discrete actions: [0] Jump, [1] Kick/Punch, [2] Stomp
             jumpPressed = actions.DiscreteActions[0] == 1;
             kickPressed = actions.DiscreteActions[1] == 1;
             stompPressed = actions.DiscreteActions[2] == 1;
             
-            // Log a cada 2 segundos para debug
+            // Log every 2 seconds for debug
             if (Time.time - lastActionLogTime > 2f)
             {
                 Debug.Log($"[ActionDebug] {name}: Joystick={joystickInput}, Jump={jumpPressed}, Kick={kickPressed}, Stomp={stompPressed}");
                 lastActionLogTime = Time.time;
             }
 
-            // Camera aponta para o goal
+            // Camera points toward goal
             if (targetGoal != null)
             {
                 cameraLookDirection = (targetGoal.position - transform.position).normalized;
@@ -296,17 +300,17 @@ namespace ParkourRL
                     cameraLookDirection = Vector3.forward;
             }
 
-            // ========== RECOMPENSAS COMPETITIVAS ==========
-            // NOTA: episodeTime agora e incrementado no FixedUpdate para ser preciso
+            // ========== COMPETITIVE REWARDS ==========
+            // NOTE: episodeTime is now incremented in FixedUpdate for accuracy
             Vector3 currentPos = transform.position;
             float currentDistance = GetDistanceToGoal();
 
-            // -- Penalidade por inatividade --
+            // -- Inactivity penalty --
             float moveDelta = Vector3.Distance(currentPos, previousPosition);
             float stepPenalty = (moveDelta < 0.05f) ? -0.015f : -0.003f;
             AddReward(stepPenalty);
 
-            // -- Recompensa por progresso --
+            // -- Progress reward --
             float distanceDelta = previousDistanceToGoal - currentDistance;
             if (distanceDelta > 0.01f)
             {
@@ -317,7 +321,7 @@ namespace ParkourRL
                 AddReward(distanceDelta * 0.3f);
             }
 
-            // -- Marco de distancia --
+            // -- Distance milestone --
             if (currentDistance < bestDistanceToGoal - 1.0f)
             {
                 AddReward(5.0f);
@@ -348,15 +352,38 @@ namespace ParkourRL
             }
         }
 
+        private float lastDiagnosticTime = 0f;
+        
+        void Update()
+        {
+            if (Time.time - lastDiagnosticTime > 1f)
+            {
+                lastDiagnosticTime = Time.time;
+                var agents = FindObjectsOfType<MarioCompetitiveAgent>();
+                string allAgentsStr = "All Agents: ";
+                var field = typeof(Unity.MLAgents.Agent).GetField("m_EpisodeId", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (field != null)
+                {
+                    foreach (var a in agents)
+                    {
+                        int id = (int)field.GetValue(a);
+                        allAgentsStr += $"[{a.name}: id={id}, active={a.gameObject.activeInHierarchy}] ";
+                    }
+                }
+                
+                Debug.Log($"[Diagnostic] AcademyStep: {Academy.Instance.StepCount} | {allAgentsStr}");
+            }
+        }
+
         void FixedUpdate()
         {
             if (hasFinished) return;
 
-            // Timer do episodio - roda a cada FixedUpdate para ser preciso
+            // Episode timer - runs every FixedUpdate for accuracy
             timeSinceEpisodeStart += Time.fixedDeltaTime;
             episodeTime += Time.fixedDeltaTime;
 
-            // Morte por queda (checada a cada frame de fisica)
+            // Death by fall (checked every physics frame)
             Vector3 currentPos = transform.position;
             if (currentPos.y < startPosition.y - 3.0f)
             {
@@ -367,7 +394,7 @@ namespace ParkourRL
                 return;
             }
 
-            // Timeout (checado a cada frame de fisica)
+            // Timeout (checked every physics frame)
             if (episodeTime >= MAX_EPISODE_TIME)
             {
                 float currentDistance = GetDistanceToGoal();
@@ -376,43 +403,22 @@ namespace ParkourRL
                 EndEpisode();
                 return;
             }
-
-            // Se apos o periodo de graca, OnActionReceived nunca foi chamado,
-            // ativar acoes de fallback (exploracao aleatoria)
-            if (!actionReceivedThisEpisode && timeSinceEpisodeStart > TRAINER_GRACE_PERIOD && !usingFallbackActions)
-            {
-                usingFallbackActions = true;
-                Debug.Log($"[{name}] Nenhum trainer detectado apos {TRAINER_GRACE_PERIOD}s. Ativando acoes de exploracao aleatoria.");
-            }
-
-            if (usingFallbackActions)
-            {
-                randomActionTimer += Time.fixedDeltaTime;
-                if (randomActionTimer >= RANDOM_ACTION_INTERVAL)
-                {
-                    randomActionTimer = 0f;
-                    GenerateRandomActions();
-                }
-
-                // Aplicar recompensas no modo fallback
-                ApplyFallbackRewards();
-            }
         }
 
         private void GenerateRandomActions()
         {
-            // Gerar acoes aleatorias para exploracao
+            // Generate random actions for exploration
             joystickInput = new Vector2(
                 Random.Range(-1f, 1f),
                 Random.Range(-1f, 1f)
             );
 
-            // 30% chance de pulo, 10% kick, 10% stomp
+            // 30% jump chance, 10% kick, 10% stomp
             jumpPressed = Random.value < 0.3f;
             kickPressed = Random.value < 0.1f;
             stompPressed = Random.value < 0.1f;
 
-            // Camera aponta para o goal
+            // Camera points toward goal
             if (targetGoal != null)
             {
                 cameraLookDirection = (targetGoal.position - transform.position).normalized;
@@ -427,12 +433,12 @@ namespace ParkourRL
             Vector3 currentPos = transform.position;
             float currentDistance = GetDistanceToGoal();
 
-            // -- Penalidade por inatividade --
+            // -- Inactivity penalty --
             float moveDelta = Vector3.Distance(currentPos, previousPosition);
             float stepPenalty = (moveDelta < 0.05f) ? -0.015f : -0.003f;
             AddReward(stepPenalty);
 
-            // -- Recompensa por progresso --
+            // -- Progress reward --
             float distanceDelta = previousDistanceToGoal - currentDistance;
             if (distanceDelta > 0.01f)
             {
@@ -443,7 +449,7 @@ namespace ParkourRL
                 AddReward(distanceDelta * 0.3f);
             }
 
-            // -- Marco de distancia --
+            // -- Distance milestone --
             if (currentDistance < bestDistanceToGoal - 1.0f)
             {
                 AddReward(5.0f);
@@ -454,7 +460,7 @@ namespace ParkourRL
             previousPosition = currentPos;
         }
 
-        // ===== METODOS PUBLICOS =====
+        // ===== PUBLIC METHODS =====
 
         public float GetDistanceToGoal()
         {
@@ -482,7 +488,7 @@ namespace ParkourRL
 
         public void OnRivalFinished(MarioCompetitiveAgent rival)
         {
-            // Rival chegou primeiro -- sem penalidade no modo simultâneo
+            // Rival finished first -- no penalty in simultaneous mode
         }
 
         public void SetGoal(Transform g) { targetGoal = g; }
@@ -496,11 +502,11 @@ namespace ParkourRL
             {
                 hasFinished = true;
 
-                // Bonus de tempo
+                // Time bonus
                 float timeRemaining = Mathf.Max(0, MAX_EPISODE_TIME - episodeTime);
                 float timeBonus = timeRemaining * 2.0f;
 
-                // Bonus por recorde pessoal
+                // Personal record bonus
                 float recordBonus = 0f;
                 if (episodeTime < bestCompletionTime)
                 {
@@ -508,7 +514,7 @@ namespace ParkourRL
                     bestCompletionTime = episodeTime;
                 }
 
-                // Bonus por ranking (Apenas registramos a vitória, sem bônus massivos para evitar competição direta por pontos)
+                // Ranking bonus (We only register the win, no massive bonuses to avoid direct competition for points)
                 if (competitiveEnv != null)
                 {
                     ranking = competitiveEnv.RegisterFinish(this);

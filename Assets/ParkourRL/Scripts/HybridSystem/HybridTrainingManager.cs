@@ -4,7 +4,7 @@ using UnityEngine.UI;
 namespace ParkourRL.HybridSystem
 {
     /// <summary>
-    /// Gerenciador do sistema híbrido: controla modo de gravação vs treino.
+    /// Hybrid system manager: controls recording mode vs training mode.
     /// Interface para alternar entre Recording (IL/Offline) e Training (RL).
     /// </summary>
     public class HybridTrainingManager : MonoBehaviour
@@ -16,7 +16,7 @@ namespace ParkourRL.HybridSystem
         [Tooltip("Permitir troca de modo em runtime (via UI ou teclas)")]
         [SerializeField] private bool allowModeSwitching = true;
         
-        [Tooltip("Tecla para alternar modo")]
+        [Tooltip("Key to toggle mode")]
         [SerializeField] private KeyCode modeSwitchKey = KeyCode.M;
 
         [Header("UI References")]
@@ -37,7 +37,7 @@ namespace ParkourRL.HybridSystem
         public enum HybridMode
         {
             Training,    // Treino RL normal
-            Recording    // Gravação para IL/Offline RL
+            Recording    // Recording for IL/Offline RL
         }
 
         public HybridMode CurrentMode => currentMode;
@@ -95,7 +95,7 @@ namespace ParkourRL.HybridSystem
             var agents = FindObjectsOfType<MarioHybridAgent>();
             foreach (var agent in agents)
             {
-                // Usar reflection ou método público se disponível
+                // Use reflection or public method if available
             }
         }
 
@@ -106,7 +106,7 @@ namespace ParkourRL.HybridSystem
             currentMode = mode;
             ApplyMode();
             
-            Debug.Log($"[HybridManager] Modo alterado para: {mode}");
+            Debug.Log($"[HybridManager] Mode changed to: {mode}");
         }
 
         public void ToggleMode()
@@ -116,7 +116,7 @@ namespace ParkourRL.HybridSystem
 
         private void ApplyMode()
         {
-            // Aplicar ao ambiente
+            // Apply to environment
             if (environment != null)
             {
                 environment.SetMode(currentMode);
@@ -127,12 +127,12 @@ namespace ParkourRL.HybridSystem
             {
                 if (currentMode == HybridMode.Recording)
                 {
-                    // Ativar gravação
-                    Debug.Log("[HybridManager] Gravação ATIVADA");
+                    // Activate recording
+                    Debug.Log("[HybridManager] Recording ACTIVATED");
                 }
                 else
                 {
-                    // Finalizar gravação pendente
+                    // Finalize pending recording
                     dataRecorder.FlushBatch();
                 }
             }
@@ -158,7 +158,7 @@ namespace ParkourRL.HybridSystem
                 infoText.text = info;
             }
             
-            // Atualizar botões
+            // Update buttons
             if (trainingButton != null)
             {
                 trainingButton.interactable = currentMode != HybridMode.Training;
@@ -202,14 +202,14 @@ namespace ParkourRL.HybridSystem
                 }
             }
             
-            // Instruções
+            // Instructions
             GUI.Label(new Rect(10, Screen.height - 30, 400, 20), 
                 "M: Toggle Mode | P: Pause | WASD+Space: Control Player");
         }
 
         void OnDestroy()
         {
-            // Garantir que dados são salvos
+            // Ensure data is saved
             if (dataRecorder != null && currentMode == HybridMode.Recording)
             {
                 dataRecorder.FlushBatch();

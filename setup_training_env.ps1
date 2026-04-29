@@ -1,43 +1,43 @@
-# Script para configurar ambiente de treinamento ML-Agents com venv
-# Este script cria um ambiente virtual Python isolado para o treinamento
-# IMPORTANTE: Usa Python 3.9 por compatibilidade com ML-Agents 0.28.0
+# Script to configure ML-Agents training environment with venv
+# This script creates an isolated Python virtual environment for training
+# IMPORTANT: Uses Python 3.9 for compatibility with ML-Agents 0.28.0
 
 $projectPath = "c:\Users\pedro\Downloads\libsm64-unity-dev-master"
 $venvPath = "$projectPath\venv_mlagents"
 
 Write-Host "======================================" -ForegroundColor Green
-Write-Host "  Configurando Ambiente ML-Agents" -ForegroundColor Green
+Write-Host "  Configuring ML-Agents Environment" -ForegroundColor Green
 Write-Host "======================================" -ForegroundColor Green
 Write-Host ""
 
-# Procurar Python 3.8 (melhor compatibilidade com ML-Agents 0.28.0)
+# Look for Python 3.8 (best compatibility with ML-Agents 0.28.0)
 $python38Path = "C:\Python38\python.exe"
 $python39Path = "C:\Python39\python.exe"
 $pythonCmd = $null
 
 if (Test-Path $python38Path) {
     $pythonCmd = $python38Path
-    Write-Host "Python 3.8 encontrado: $pythonCmd" -ForegroundColor Green
+    Write-Host "Python 3.8 found: $pythonCmd" -ForegroundColor Green
 } elseif (Test-Path $python39Path) {
     $pythonCmd = $python39Path
-    Write-Host "Python 3.9 encontrado: $pythonCmd" -ForegroundColor Yellow
-    Write-Host "AVISO: Python 3.9 pode ter problemas de compatibilidade com ML-Agents 0.28.0" -ForegroundColor Yellow
+    Write-Host "Python 3.9 found: $pythonCmd" -ForegroundColor Yellow
+    Write-Host "WARNING: Python 3.9 may have compatibility issues with ML-Agents 0.28.0" -ForegroundColor Yellow
 } else {
-    # Tentar encontrar via py launcher
+    # Try to find via py launcher
     $pyLauncher = Get-Command "py" -ErrorAction SilentlyContinue
     if ($pyLauncher) {
         try {
             $pyVersion = & py -3.8 --version 2>&1
             if ($pyVersion -match "3.8") {
                 $pythonCmd = "py -3.8"
-                Write-Host "Python 3.8 encontrado via py launcher" -ForegroundColor Green
+                Write-Host "Python 3.8 found via py launcher" -ForegroundColor Green
             }
         } catch {
             try {
                 $pyVersion = & py -3.9 --version 2>&1
                 if ($pyVersion -match "3.9") {
                     $pythonCmd = "py -3.9"
-                    Write-Host "Python 3.9 encontrado via py launcher" -ForegroundColor Yellow
+                    Write-Host "Python 3.9 found via py launcher" -ForegroundColor Yellow
                 }
             } catch {}
         }
@@ -45,15 +45,15 @@ if (Test-Path $python38Path) {
 }
 
 if (-not $pythonCmd) {
-    Write-Host "ERRO: Python 3.8 ou 3.9 não encontrado!" -ForegroundColor Red
+    Write-Host "ERROR: Python 3.8 or 3.9 not found!" -ForegroundColor Red
     Write-Host ""
-    Write-Host "O ML-Agents 0.28.0 requer Python 3.8 ou 3.9." -ForegroundColor Yellow
+    Write-Host "ML-Agents 0.28.0 requires Python 3.8 or 3.9." -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "Opções (execute um dos scripts):" -ForegroundColor Cyan
-    Write-Host "1. .\setup_python38.ps1  (recomendado - mais compatível)" -ForegroundColor Yellow
-    Write-Host "2. .\setup_python39.ps1  (alternativa)" -ForegroundColor Yellow
+    Write-Host "Options (run one of the scripts):" -ForegroundColor Cyan
+    Write-Host "1. .\setup_python38.ps1  (recommended - most compatible)" -ForegroundColor Yellow
+    Write-Host "2. .\setup_python39.ps1  (alternative)" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "Pressione ENTER para sair..."
+    Write-Host "Press ENTER to exit..."
     Read-Host
     exit 1
 }
@@ -61,36 +61,36 @@ Write-Host ""
 
 Set-Location $projectPath
 
-# Remover venv antigo se existir
+# Remove old venv if it exists
 if (Test-Path $venvPath) {
-    Write-Host "Removendo ambiente virtual antigo..." -ForegroundColor Yellow
+    Write-Host "Removing old virtual environment..." -ForegroundColor Yellow
     Remove-Item -Recurse -Force $venvPath
 }
 
-# Criar novo venv
-Write-Host "Criando ambiente virtual em: $venvPath" -ForegroundColor Cyan
+# Create new venv
+Write-Host "Creating virtual environment at: $venvPath" -ForegroundColor Cyan
 & $pythonCmd -m venv $venvPath
 
 if (-not (Test-Path $venvPath)) {
-    Write-Host "ERRO: Falha ao criar ambiente virtual!" -ForegroundColor Red
+    Write-Host "ERROR: Failed to create virtual environment!" -ForegroundColor Red
     exit 1
 }
 
-Write-Host "Ambiente virtual criado com sucesso!" -ForegroundColor Green
+Write-Host "Virtual environment created successfully!" -ForegroundColor Green
 Write-Host ""
 
-# Ativar venv
-Write-Host "Ativando ambiente virtual..." -ForegroundColor Cyan
+# Activate venv
+Write-Host "Activating virtual environment..." -ForegroundColor Cyan
 $activateScript = "$venvPath\Scripts\Activate.ps1"
 & $activateScript
 
-# Atualizar pip
-Write-Host "Atualizando pip..." -ForegroundColor Cyan
+# Update pip
+Write-Host "Updating pip..." -ForegroundColor Cyan
 python -m pip install --upgrade pip --quiet
 
-# Instalar dependências
-Write-Host "Instalando ML-Agents e dependências..." -ForegroundColor Cyan
-Write-Host "Isso pode levar alguns minutos..." -ForegroundColor Yellow
+# Install dependencies
+Write-Host "Installing ML-Agents and dependencies..." -ForegroundColor Cyan
+Write-Host "This may take a few minutes..." -ForegroundColor Yellow
 
 pip install mlagents==0.28.0 --quiet
 pip install torch --quiet
@@ -99,54 +99,54 @@ pip install protobuf==3.20.3 --quiet
 
 Write-Host ""
 Write-Host "======================================" -ForegroundColor Green
-Write-Host "  Ambiente Configurado com Sucesso!" -ForegroundColor Green
+Write-Host "  Environment Configured Successfully!" -ForegroundColor Green
 Write-Host "======================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "Para usar o ambiente:" -ForegroundColor Cyan
-Write-Host "1. Execute: .\venv_mlagents\Scripts\Activate.ps1" -ForegroundColor Yellow
-Write-Host "2. Depois execute: mlagents-learn Assets/ParkourRL/Config/mario_parkour.yaml --run-id=mario_parkour_v1" -ForegroundColor Yellow
+Write-Host "To use the environment:" -ForegroundColor Cyan
+Write-Host "1. Run: .\venv_mlagents\Scripts\Activate.ps1" -ForegroundColor Yellow
+Write-Host "2. Then run: mlagents-learn Assets/ParkourRL/Config/mario_parkour.yaml --run-id=mario_parkour_v1" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "Ou execute o script de treinamento:" -ForegroundColor Cyan
+Write-Host "Or run the training script:" -ForegroundColor Cyan
 Write-Host ".\train_with_venv.ps1" -ForegroundColor Yellow
 Write-Host ""
 
-# Criar script de treinamento com venv
+# Create training script with venv
 $trainScriptContent = @'
-# Script para treinar usando o ambiente virtual
+# Script to train using the virtual environment
 $projectPath = "c:\Users\pedro\Downloads\libsm64-unity-dev-master"
 Set-Location $projectPath
 
-# Ativar venv
+# Activate venv
 $activateScript = "$projectPath\venv_mlagents\Scripts\Activate.ps1"
 if (Test-Path $activateScript) {
     & $activateScript
-    Write-Host "Ambiente virtual ativado!" -ForegroundColor Green
+    Write-Host "Virtual environment activated!" -ForegroundColor Green
 } else {
-    Write-Host "ERRO: Ambiente virtual não encontrado. Execute setup_training_env.ps1 primeiro." -ForegroundColor Red
+    Write-Host "ERROR: Virtual environment not found. Run setup_training_env.ps1 first." -ForegroundColor Red
     exit 1
 }
 
 Write-Host ""
 Write-Host "======================================" -ForegroundColor Green
-Write-Host "  Iniciando Treinamento do Mario" -ForegroundColor Green
+Write-Host "  Starting Mario Training" -ForegroundColor Green
 Write-Host "======================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "Certifique-se de que:" -ForegroundColor Yellow
-Write-Host "1. Unity Editor está aberto com ParkourTraining.unity" -ForegroundColor Yellow
-Write-Host "2. Cena está em modo Play" -ForegroundColor Yellow
+Write-Host "Make sure that:" -ForegroundColor Yellow
+Write-Host "1. Unity Editor is open with ParkourTraining.unity" -ForegroundColor Yellow
+Write-Host "2. Scene is in Play mode" -ForegroundColor Yellow
 Write-Host ""
 
 mlagents-learn Assets/ParkourRL/Config/mario_parkour.yaml --run-id=mario_parkour_v1 --force
 
 Write-Host ""
-Write-Host "Treinamento concluído!" -ForegroundColor Green
-Write-Host "Modelo salvo em: results/mario_parkour_v1/" -ForegroundColor Cyan
+Write-Host "Training completed!" -ForegroundColor Green
+Write-Host "Model saved at: results/mario_parkour_v1/" -ForegroundColor Cyan
 '@
 
 $trainScriptPath = "$projectPath\train_with_venv.ps1"
 $trainScriptContent | Out-File -FilePath $trainScriptPath -Encoding UTF8
 
-Write-Host "Script de treinamento criado: train_with_venv.ps1" -ForegroundColor Green
+Write-Host "Training script created: train_with_venv.ps1" -ForegroundColor Green
 Write-Host ""
-Write-Host "Pressione ENTER para sair..."
+Write-Host "Press ENTER to exit..."
 Read-Host

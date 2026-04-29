@@ -1,297 +1,207 @@
-# Sistema Híbrido de Treinamento - Mario Parkour
+# Hybrid Training System - Mario Parkour
 
-## Visão Geral
+## Overview
 
-Este sistema implementa uma arquitetura híbrida que combina:
+This system implements a hybrid architecture that combines:
 
-- **Imitation Learning (IL)**: Aprendizado a partir de demonstrações humanas
-- **Offline RL**: Treinamento de dados gravados sem ambiente
-- **Online RL**: Treinamento tradicional com ML-Agents
-- **DAgger**: Dataset Aggregation para melhorar políticas iterativamente
+- **Imitation Learning (IL)**: Learning from human demonstrations
+- **Offline RL (CQL/IQL)**: Training from recorded data without environment interaction
+- **Online RL (PPO)**: Standard reinforcement learning with ML-Agents
+- **DAgger**: Dataset Aggregation to iteratively improve policies
 
-## Componentes
+## Architecture
 
-### Scripts Unity
+### Unity Scripts
 
-| Script | Função |
-|--------|--------|
-| `MarioHybridAgent.cs` | Agente que suporta modo Treino e Gravação |
-| `HybridPlayerMario.cs` | Mario controlado pelo player para gravar demos |
-| `HybridParkourEnvironment.cs` | Ambiente que gerencia dois Marios lado a lado |
-| `HybridDataRecorder.cs` | Grava e salva transições em JSON/CSV |
-| `HybridTrainingManager.cs` | Interface para alternar entre modos |
+| Script | Function |
+|--------|----------|
+| `MarioHybridAgent.cs` | Agent that supports Training and Recording modes |
+| `HybridParkourEnvironment.cs` | Manages two Marios side by side |
+| `HybridPlayerMario.cs` | Player-controlled Mario for recording demos |
+| `HybridDataRecorder.cs` | Records and saves transitions in JSON/CSV |
+| `HybridTrainingManager.cs` | Manages mode switching (Training/Recording) |
 
-### Scripts Python
+### Python Scripts
 
-| Script | Função |
-|--------|--------|
-| `train_behavior_cloning.py` | Treina rede neural para imitar demonstrações |
-| `train_offline_rl.py` | Treina com CQL/IQL usando dados gravados |
-| `train_dagger.py` | Implementa DAgger para melhorar iterativamente |
+| Script | Function |
+|--------|----------|
+| `train_behavior_cloning.py` | Trains neural network to imitate demonstrations |
+| `train_offline_rl.py` | Trains with CQL/IQL from recorded data |
+| `analyze_dataset.py` | Dataset statistics and quality analysis |
 
-## Fluxo de Trabalho
+## Workflow
 
-### 1. Fase de Gravação (Recording)
+### 1. Recording Phase
 
 ```
-Cena: HybridTraining.unity
-Modo: Recording (pressione 'M')
-Ação: Controle Mario verde com WASD+Space
-Saída: Arquivos JSON/CSV em HybridTrainingData/
+Scene: HybridTraining.unity
+Mode: Recording (press M)
+Action: Control green Mario with WASD+Space
+Output: JSON/CSV files in HybridTrainingData/
 ```
 
-### 2. Fase de Imitation Learning
+### 2. Behavior Cloning Phase
 
 ```bash
-# Treinar Behavior Cloning
+cd python_trainers
 python train_behavior_cloning.py \
-    --data HybridTrainingData/ \
+    --data ../HybridTrainingData/ \
     --epochs 100 \
-    --output models/bc_model.pth
+    --output models/bc_mario.pth
 ```
 
-### 3. Fase de DAgger (Opcional)
+### 3. Offline RL Phase
 
 ```bash
-# Iteração 1: Agente tenta, humano corrige
-python train_dagger.py \
-    --initial-model models/bc_model.pth \
-    --iterations 5 \
-    --output models/dagger_model.pth
-```
-
-### 4. Fase de RL com Warm-Start
-
-```bash
-# Treinar PPO inicializando com pesos do BC
-mlagents-learn mario_parkour_hybrid.yaml \
-    --run-id=mario_hybrid_bc \
-    --initialize-from=models/bc_model.pth
-```
-
-### 5. Fase de Offline RL (Alternativa)
-
-```bash
-# Treinar CQL diretamente dos dados
 python train_offline_rl.py \
-    --data HybridTrainingData/ \
+    --data ../HybridTrainingData/ \
     --algo CQL \
-    --output models/cql_model.pth
+    --epochs 50 \
+    --output models/cql_mario.pth
 ```
 
-## Formato dos Dados
+### 4. DAgger (Advanced)
 
-### Estrutura JSON
+```bash
+# Iteration 1: Agent attempts, human corrects
+python train_behavior_cloning.py --data ../HybridTrainingData/ --output models/dagger_iter1.pth
+
+# Iteration 2: More data collected with mixed policy
+python train_behavior_cloning.py --data ../HybridTrainingData/ --output models/dagger_iter2.pth
+```
+
+### 5. Online RL with Warm-Start
+
+```bash
+mlagents-learn Assets/ParkourRL/Config/mario_parkour_hybrid.yaml \
+    --run-id=mario_hybrid_warmstart \
+    --initialize-from=results/prev_run/MarioHybrid.onnx
+```
+
+## Data Format
+
+### JSON Structure
 
 ```json
 {
   "metadata": {
     "createdAt": "2026-04-25T14:30:00",
-    "episodeCount": 100,
-    "successRate": 0.68,
-    "averageReward": 25.3
+    "episodeCount": 10,
+    "totalSteps": 2500,
+    "averageReward": 15.3,
+    "successRate": 0.6
   },
-  "episodes": [
-    {
-      "episodeId": 0,
-      "success": true,
-      "startTime": "2026-04-25T14:30:00",
-      "duration": 15.2,
-      "stepCount": 304,
-      "totalReward": 47.5,
-      "transitions": [
-        {
-          "step": 0,
-          "timestamp": 0.0,
-          "observations": [0.1, 0.2, 0.0, ..., 0.5],  // 30 obs
-          "actions": [0.5, 0.0, 1.0],  // [joy_x, joy_y, jump]
-          "reward": -0.01,
-          "nextObservations": [0.11, 0.21, ...],
-          "done": false
-        }
-      ]
-    }
-  ]
+  "episodes": [{
+    "episodeId": 0,
+    "success": true,
+    "stepCount": 300,
+    "totalReward": 45.7,
+    "transitions": [{
+      "step": 0,
+      "observations": [0.1, 0.2, ...],
+      "actions": [0.5, 0.0, 1.0],
+      "reward": 2.5,
+      "nextObservations": [0.11, ...],
+      "done": false
+    }]
+  }]
 }
 ```
 
-## API dos Componentes
+## API Reference
 
 ### MarioHybridAgent
 
 ```csharp
-// Modos de operação
+// Operation modes
 public enum HybridMode { Training, Recording }
 
-// Métodos públicos
+// Public methods
 void SetMode(HybridMode mode)
-void SetDataRecorder(HybridDataRecorder recorder)
-void SetEnvironment(HybridParkourEnvironment env)
-void SetTargetGoal(Transform goal)
+void SetGoal(Transform goal)
+void SetRecorder(HybridDataRecorder recorder)
+```
+
+### HybridPlayerMario
+
+```csharp
+// Methods
+void RecordTransition(float[] obs, float[] actions, float reward)
+void EndEpisode(bool success)
+float[] CollectObservations()
 ```
 
 ### HybridDataRecorder
 
 ```csharp
-// Eventos
-event Action OnEpisodeStarted
-event Action<bool> OnEpisodeEnded  // bool = success
-
-// Métodos
+// Methods
 void StartEpisode()
 void RecordStep(float[] obs, float[] actions, float reward, float[] nextObs, bool done)
 void SaveEpisode(Transition[] transitions, bool success)
-void FlushBatch()  // Salvar imediatamente
+void FlushBatch()
 ```
 
-### HybridTrainingManager
+## ML-Agents Integration
 
-```csharp
-// Modos
-public enum HybridMode { Training, Recording }
+The system is fully compatible with ML-Agents:
 
-// Propriedades
-HybridMode CurrentMode { get; }
+1. **BehaviorName**: `MarioHybrid`
+2. **Observations**: 30 dimensions (same format as the standard MarioRLAgent)
+3. **Actions**: 2 continuous (joystick) + 1 discrete (jump)
+4. **Config**: `mario_parkour_hybrid.yaml`
 
-// Métodos
-void SetMode(HybridMode mode)
-void ToggleMode()
-void TogglePause()
-void ResetScene()
+## YAML Configuration
+
+See `Assets/ParkourRL/Config/mario_parkour_hybrid.yaml`
+
+### Differences from default parkour:
+- **Beta**: 0.02 (higher exploration for imitation)
+- **Buffer Size**: 4096 (smaller for faster adaptation)
+- **Batch Size**: 512 (smaller for rapid adaptation)
+
+## Future Extensions
+
+### Reward Shaping from Demonstrations
+```python
+# Pseudocode
+for transition in demo_data:
+    if similar_to_expert(agent_state, transition):
+        bonus_reward += 0.1
 ```
-
-## Integração com ML-Agents
-
-O sistema é totalmente compatível com ML-Agents:
-
-1. **Behavior Name**: `MarioHybrid`
-2. **Observations**: 30 dimensões (mesmo formato do MarioRLAgent padrão)
-3. **Actions**: 2 contínuas (joystick) + 1 discreta (jump)
-4. **Reward**: Mesma estrutura do parkour original
-
-## Arquitetura de Comunicação
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    HybridTraining                       │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  ┌─────────────────┐    ┌─────────────────┐            │
-│  │  Player Mario   │    │    AI Mario     │            │
-│  │  (WASD+Space)   │    │  (ML-Agents)    │            │
-│  │     [GREEN]     │    │     [BLUE]      │            │
-│  └────────┬────────┘    └────────┬────────┘            │
-│           │                      │                      │
-│           ▼                      ▼                      │
-│  ┌─────────────────┐    ┌─────────────────┐            │
-│  │ HybridPlayer    │    │ MarioHybridAgent│            │
-│  │    Mario        │    │                 │            │
-│  └────────┬────────┘    └────────┬────────┘            │
-│           │                      │                      │
-│           └──────────┬───────────┘                      │
-│                      ▼                                  │
-│           ┌─────────────────────┐                       │
-│           │ HybridParkour       │                       │
-│           │ Environment         │                       │
-│           └──────────┬──────────┘                       │
-│                      │                                  │
-│           ┌──────────┴──────────┐                       │
-│           │                     │                        │
-│           ▼                     ▼                        │
-│  ┌─────────────────┐  ┌─────────────────┐              │
-│  │ HybridData      │  │ HybridTraining  │              │
-│  │ Recorder        │  │ Manager         │              │
-│  │                 │  │                 │              │
-│  │ JSON/CSV Output │  │ UI / Controls   │              │
-│  └─────────────────┘  └─────────────────┘              │
-│                                                         │
-└─────────────────────────────────────────────────────────┘
-```
-
-## Configurações YAML
-
-### mario_parkour_hybrid.yaml
-
-Ver arquivo em `Assets/ParkourRL/Config/mario_parkour_hybrid.yaml`
-
-### Diferenças do parkour padrão:
-
-- **Behavior Name**: `MarioHybrid` (não `MarioParkour`)
-- **Curriculum**: Adaptado para treino com player
-- **Time Horizon**: 128 (mesmo do padrão)
-- **Batch Size**: 512 (menor para adaptação rápida)
-
-## Extensões Futuras
 
 ### GAIL (Generative Adversarial IL)
-
-Adicionar discriminador adversarial para distinguir humano vs agente:
-
-```python
-# Pseudocódigo
-for iteration in range(1000):
-    # Treinar discriminador
-    loss_disc = distinguish(human_traj, agent_traj)
-    
-    # Treinar agente para enganar discriminador
-    reward = log(discriminator(agent_traj))
-    ppo_update(reward + env_reward)
+```yaml
+# ML-Agents native support
+reward_signals:
+  gail:
+    strength: 0.5
+    demo_path: HybridTrainingData/demos.demo
 ```
 
-### SQIL (Soft Q Imitation Learning)
-
-Modificar recompensas:
-- Demonstrações humanas: reward = 1 (máximo)
-- Interações agente: reward normal do ambiente
-
-### IQ-Learn
-
-Aprender Q-function implicitamente dos dados:
-
-```python
-# Sem necessidade de actions no dataset
-# Apenas (obs, next_obs, reward, done)
-```
+### Reward Relabeling
+- Human demonstrations: reward = 1 (maximum)
+- Agent interactions: normal environment reward
+- Mixed: weighted average
 
 ## Troubleshooting
 
-### Dados não aparecem
-
+### No data recorded
 ```bash
-# Verificar diretório
-ls -la HybridTrainingData/
+# Check directory
+ls HybridTrainingData/
 
-# Permissões
+# Permissions
 chmod 755 HybridTrainingData/
-```
 
-### Agente não aprende com BC
-
-```python
-# Verificar sobreposição de dados
+# Check data overlap
 python analyze_dataset.py --data HybridTrainingData/
-
-# Aumentar capacidade da rede
-python train_behavior_cloning.py --hidden-size 512 --layers 3
 ```
 
-### Memória insuficiente
+### BC model not converging
+- Verify data quality with `analyze_dataset.py`
+- Try reducing learning rate: `--lr 1e-4`
+- Increase hidden layer size: `--hidden-size 512`
 
-```python
-# Processar em batches
-python train_offline_rl.py --batch-size 256 --buffer-size 10000
-```
-
-## Referências
-
-1. **Behavior Cloning**: Pomerleau (1989) - ALVINN
-2. **DAgger**: Ross et al. (2011) - A Reduction of Imitation Learning
-3. **GAIL**: Ho & Ermon (2016) - Generative Adversarial IL
-4. **CQL**: Kumar et al. (2020) - Conservative Q-Learning
-5. **IQL**: Kostrikov et al. (2021) - Implicit Q-Learning
-
----
-
-**Autor**: Sistema criado para projeto Mario Parkour RL
-**Data**: Abril 2026
-**Versão**: 1.0
+### Offline RL with high Q-values
+- Increase CQL alpha: `--cql-alpha 5.0`
+- Use IQL instead: `--algo IQL`

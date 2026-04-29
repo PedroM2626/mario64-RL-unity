@@ -1,8 +1,8 @@
 """
-Behavior Cloning (BC) para Mario Parkour
-Treina uma rede neural para imitar demonstrações humanas.
+Behavior Cloning (BC) for Mario Parkour
+Trains a neural network to imitate human demonstrations.
 
-Uso:
+Usage:
     python train_behavior_cloning.py --data ../HybridTrainingData/ --epochs 100 --output models/bc_model.pth
 """
 
@@ -19,24 +19,24 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 
-# Configuração
+# Configuration
 OBSERVATION_DIM = 30
 ACTION_DIM = 3  # [joystick_x, joystick_y, jump]
 
 class MarioDataset(Dataset):
-    """Dataset de transições do Mario."""
+    """Mario transition dataset."""
     
     def __init__(self, data_dir, min_episode_length=10):
         self.transitions = []
         self.load_data(data_dir, min_episode_length)
-        print(f"Dataset carregado: {len(self.transitions)} transições")
+        print(f"Dataset loaded: {len(self.transitions)} transitions")
         
     def load_data(self, data_dir, min_length):
-        """Carrega todos os arquivos JSON do diretório."""
+        """Loads all JSON files from the directory."""
         json_files = glob.glob(os.path.join(data_dir, "*.json"))
         
         if not json_files:
-            raise ValueError(f"Nenhum arquivo JSON encontrado em {data_dir}")
+            raise ValueError(f"No JSON files found in {data_dir}")
         
         for json_file in json_files:
             try:
@@ -58,7 +58,7 @@ class MarioDataset(Dataset):
                             })
                             
             except Exception as e:
-                print(f"Erro ao carregar {json_file}: {e}")
+                print(f"Error loading {json_file}: {e}")
     
     def __len__(self):
         return len(self.transitions)
@@ -69,7 +69,7 @@ class MarioDataset(Dataset):
 
 
 class MarioPolicy(nn.Module):
-    """Política de comportamento para Mario."""
+    """Behavior policy for Mario."""
     
     def __init__(self, obs_dim=OBSERVATION_DIM, action_dim=ACTION_DIM, 
                  hidden_size=256, num_layers=2):
@@ -85,9 +85,9 @@ class MarioPolicy(nn.Module):
         
         self.network = nn.Sequential(*layers)
         
-        # Saídas: 2 contínuas (joystick) + 1 discreta (jump)
+        # Outputs: 2 continuous (joystick) + 1 discrete (jump)
         self.continuous_head = nn.Linear(hidden_size, 2)
-        self.jump_head = nn.Linear(hidden_size, 1)  # Probabilidade de jump
+        self.jump_head = nn.Linear(hidden_size, 1)  # Jump probability
         
     def forward(self, obs):
         features = self.network(obs)
@@ -98,7 +98,7 @@ class MarioPolicy(nn.Module):
         return continuous_actions, jump_prob
     
     def predict(self, obs):
-        """Inferência (sem gradiente)."""
+        """Inference (no gradient)."""
         with torch.no_grad():
             cont, jump = self.forward(obs)
             jump_action = (jump > 0.5).float()
@@ -106,20 +106,20 @@ class MarioPolicy(nn.Module):
 
 
 def train_behavior_cloning(args):
-    """Treina Behavior Cloning."""
+    """Trains Behavior Cloning."""
     
     print("=" * 60)
     print("Behavior Cloning - Mario Parkour")
     print("=" * 60)
     
-    # Carregar dados
+    # Load data
     dataset = MarioDataset(args.data, min_episode_length=args.min_episode_length)
     
     if len(dataset) == 0:
-        print("ERRO: Nenhuma transição carregada!")
+        print("ERROR: No transitions loaded!")
         return
     
-    # Split treino/validação
+    # Train/validation split
     train_size = int(0.9 * len(dataset))
     val_size = len(dataset) - train_size
     train_dataset, val_dataset = torch.utils.data.random_split(
@@ -129,17 +129,17 @@ def train_behavior_cloning(args):
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size)
     
-    # Criar modelo
+    # Create model
     device = torch.device('cuda' if torch.cuda.is_available() and args.cuda else 'cpu')
     model = MarioPolicy(
         hidden_size=args.hidden_size,
         num_layers=args.num_layers
     ).to(device)
     
-    print(f"Modelo criado: {sum(p.numel() for p in model.parameters())} parâmetros")
+    print(f"Model created: {sum(p.numel() for p in model.parameters())} parameters")
     print(f"Device: {device}")
     
-    # Otimizador
+    # Optimizer
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.5)
     
@@ -147,14 +147,14 @@ def train_behavior_cloning(args):
     mse_loss = nn.MSELoss()
     bce_loss = nn.BCELoss()
     
-    # Histórico
+    # History
     train_losses = []
     val_losses = []
     best_val_loss = float('inf')
     
-    # Treinamento
+    # Training
     for epoch in range(args.epochs):
-        # Treino
+        # Train
         model.train()
         train_loss = 0.0
         train_steps = 0
@@ -166,13 +166,13 @@ def train_behavior_cloning(args):
             
             cont_pred, jump_pred = model(obs)
             
-            # Loss para ações contínuas (joystick)
+            # Loss for continuous actions (joystick)
             loss_cont = mse_loss(cont_pred, actions[:, :2])
             
-            # Loss para jump (BCE)
+            # Loss for jump (BCE)
             loss_jump = bce_loss(jump_pred.squeeze(), actions[:, 2])
             
-            # Loss total
+            # Total loss
             loss = loss_cont + loss_jump
             
             loss.backward()
@@ -185,7 +185,7 @@ def train_behavior_cloning(args):
         avg_train_loss = train_loss / train_steps
         train_losses.append(avg_train_loss)
         
-        # Validação
+        # Validation
         model.eval()
         val_loss = 0.0
         val_steps = 0
@@ -215,7 +215,7 @@ def train_behavior_cloning(args):
                   f"Val Loss: {avg_val_loss:.6f}, "
                   f"LR: {scheduler.get_last_lr()[0]:.6f}")
         
-        # Salvar melhor modelo
+        # Save best model
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             os.makedirs(os.path.dirname(args.output), exist_ok=True)
@@ -227,14 +227,14 @@ def train_behavior_cloning(args):
                 'val_loss': avg_val_loss,
                 'args': vars(args)
             }, args.output)
-            print(f"  -> Modelo salvo (val loss: {avg_val_loss:.6f})")
+            print(f"  -> Model saved (val loss: {avg_val_loss:.6f})")
     
     print("\n" + "=" * 60)
-    print(f"Treinamento completo!")
-    print(f"Modelo salvo em: {args.output}")
-    print(f"Melhor val loss: {best_val_loss:.6f}")
+    print(f"Training complete!")
+    print(f"Model saved at: {args.output}")
+    print(f"Best val loss: {best_val_loss:.6f}")
     
-    # Plotar curvas
+    # Plot curves
     if args.plot:
         plt.figure(figsize=(10, 5))
         plt.plot(train_losses, label='Train Loss')
@@ -245,7 +245,7 @@ def train_behavior_cloning(args):
         plt.title('Behavior Cloning Training')
         plt.grid(True)
         plt.savefig(args.output.replace('.pth', '_training.png'))
-        print(f"Gráfico salvo em: {args.output.replace('.pth', '_training.png')}")
+        print(f"Plot saved at: {args.output.replace('.pth', '_training.png')}")
     
     return model
 
@@ -253,11 +253,11 @@ def train_behavior_cloning(args):
 def main():
     parser = argparse.ArgumentParser(description='Train Behavior Cloning for Mario')
     parser.add_argument('--data', type=str, required=True, 
-                        help='Diretório com dados JSON')
+                        help='Directory with JSON data')
     parser.add_argument('--output', type=str, default='models/bc_model.pth',
-                        help='Caminho para salvar modelo')
+                        help='Path to save model')
     parser.add_argument('--epochs', type=int, default=100,
-                        help='Número de epochs')
+                        help='Number of epochs')
     parser.add_argument('--batch-size', type=int, default=256,
                         help='Batch size')
     parser.add_argument('--lr', type=float, default=3e-4,
@@ -265,15 +265,15 @@ def main():
     parser.add_argument('--weight-decay', type=float, default=1e-5,
                         help='Weight decay')
     parser.add_argument('--hidden-size', type=int, default=256,
-                        help='Tamanho da camada oculta')
+                        help='Hidden layer size')
     parser.add_argument('--num-layers', type=int, default=2,
-                        help='Número de camadas')
+                        help='Number of layers')
     parser.add_argument('--min-episode-length', type=int, default=10,
-                        help='Comprimento mínimo do episódio')
+                        help='Minimum episode length')
     parser.add_argument('--cuda', action='store_true',
-                        help='Usar CUDA se disponível')
+                        help='Use CUDA if available')
     parser.add_argument('--plot', action='store_true',
-                        help='Plotar curvas de treinamento')
+                        help='Plot training curves')
     
     args = parser.parse_args()
     

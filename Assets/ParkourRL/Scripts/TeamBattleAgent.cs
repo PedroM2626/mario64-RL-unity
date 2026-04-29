@@ -9,8 +9,8 @@ namespace ParkourRL
 {
     /// <summary>
     /// Agente Mario em batalha de times: trabalha com teammates para derrotar o time inimigo.
-    /// Observações incluem posição de teammates e inimigos.
-    /// Recompensas baseadas em dano aos inimigos e proteção de teammates.
+    /// Observations include teammate and enemy positions.
+    /// Rewards based on enemy damage and teammate protection.
     /// </summary>
     public class TeamBattleAgent : Agent
     {
@@ -41,7 +41,7 @@ namespace ParkourRL
         private float lastStompTime = 0f;
         private const float COMBAT_COOLDOWN = 0.3f;
 
-        // Referências de time
+        // Team references
         private List<TeamBattleAgent> teammates = new List<TeamBattleAgent>();
         private List<TeamBattleAgent> rivals = new List<TeamBattleAgent>();
 
@@ -128,22 +128,22 @@ namespace ParkourRL
             Vector3 envOffset = battleEnvironment != null ? battleEnvironment.transform.position : Vector3.zero;
             Vector3 localPosition = position - envOffset;
 
-            // [3 obs] Posição do Mario (normalizada)
+            // [3 obs] Position do Mario (normalizada)
             sensor.AddObservation(localPosition.x / 50f);
             sensor.AddObservation(localPosition.y / 10f);
             sensor.AddObservation(localPosition.z / 50f);
 
-            // [3 obs] Velocidade do Mario
+            // [3 obs] Mario velocity
             Vector3 velocity = (position - previousPosition) / Mathf.Max(Time.fixedDeltaTime, 0.001f);
             sensor.AddObservation(Mathf.Clamp(velocity.x / 10f, -1f, 1f));
             sensor.AddObservation(Mathf.Clamp(velocity.y / 10f, -1f, 1f));
             sensor.AddObservation(Mathf.Clamp(velocity.z / 10f, -1f, 1f));
 
-            // [1 obs] Está no ar?
+            // [1 obs] Is airborne?
             bool isGrounded = Physics.RaycastNonAlloc(position + Vector3.up * 0.1f, Vector3.down, raycastHitsCache, 0.5f) > 0;
             sensor.AddObservation(isGrounded ? 0f : 1f);
 
-            // [16 obs] Raycasts para detectar terreno/obstáculos/rivais
+            // [16 obs] Raycasts to detect terrain/obstacles/rivals
             for (int i = 0; i < raycastCount; i++)
             {
                 float angle = (360f / raycastCount) * i;
@@ -161,7 +161,7 @@ namespace ParkourRL
                 }
             }
 
-            // [1 obs] Altura do chão abaixo
+            // [1 obs] Ground height abaixo
             if (Physics.RaycastNonAlloc(position + Vector3.up * 0.5f, Vector3.down, raycastHitsCache, 20f) > 0)
             {
                 sensor.AddObservation(raycastHitsCache[0].distance / 20f);
@@ -171,10 +171,10 @@ namespace ParkourRL
                 sensor.AddObservation(1f);
             }
 
-            // [1 obs] Tempo normalizado
+            // [1 obs] Normalized time
             sensor.AddObservation(episodeTime / MAX_EPISODE_TIME);
 
-            // [15 obs] Informações sobre até 5 teammates: [posX, posZ, health]
+            // [15 obs] Information about up to 5 teammates: [posX, posZ, health]
             // Ordenar por proximidade (filtrar destruidos primeiro)
             List<TeamBattleAgent> sortedTeammates = GetValidAgents(teammates);
             sortedTeammates.Sort((a, b) =>
@@ -199,7 +199,7 @@ namespace ParkourRL
                 }
             }
 
-            // [15 obs] Informações sobre até 5 rivais: [posX, posZ, health]
+            // [15 obs] Information about up to 5 rivals: [posX, posZ, health]
             List<TeamBattleAgent> sortedRivals = GetValidAgents(rivals);
             sortedRivals.Sort((a, b) =>
                 Vector3.Distance(position, a.transform.position).CompareTo(
@@ -223,7 +223,7 @@ namespace ParkourRL
                 }
             }
 
-            // [1 obs] Própria saúde normalizada
+            // [1 obs] Own health normalized
             sensor.AddObservation(Mathf.Clamp(currentHealth / maxHealth, 0f, 1f));
 
             // Total: 3 + 3 + 1 + 16 + 1 + 1 + 15 + 15 + 1 = 56
@@ -231,13 +231,13 @@ namespace ParkourRL
 
         public override void OnActionReceived(ActionBuffers actions)
         {
-            // Ações contínuas: joystick
+            // Continuous actions: joystick
             joystickInput = new Vector2(
                 Mathf.Clamp(actions.ContinuousActions[0], -1f, 1f),
                 Mathf.Clamp(actions.ContinuousActions[1], -1f, 1f)
             );
 
-            // Ações discretas: [0] Jump, [1] Kick/Punch, [2] Stomp
+            // Discrete actions: [0] Jump, [1] Kick/Punch, [2] Stomp
             jumpPressed = actions.DiscreteActions[0] == 1;
             lastKickPressed = actions.DiscreteActions[1] == 1 && (Time.time - lastKickTime > COMBAT_COOLDOWN);
             lastStompPressed = actions.DiscreteActions[2] == 1 && (Time.time - lastStompTime > COMBAT_COOLDOWN);
@@ -248,7 +248,7 @@ namespace ParkourRL
             kickPressed = lastKickPressed;
             stompPressed = lastStompPressed;
 
-            // Câmera aponta na direção do inimigo mais próximo
+            // Camera points in the direction of the nearest enemy
             TeamBattleAgent nearestRivalForCam = null;
             float nearestDist = float.MaxValue;
             foreach (var rival in rivals)
@@ -277,7 +277,7 @@ namespace ParkourRL
             episodeTime += Time.fixedDeltaTime;
             Vector3 currentPos = transform.position;
 
-            // -- Penalidade por inatividade --
+            // -- Inactivity penalty --
             float moveDelta = Vector3.Distance(currentPos, previousPosition);
             float stepPenalty = (moveDelta < 0.05f) ? -0.01f : -0.003f;
             AddReward(stepPenalty);
@@ -361,7 +361,7 @@ namespace ParkourRL
         /// </summary>
         public void ApplyKnockback(Vector3 knockbackVector)
         {
-            // Teleportar Mario para a nova posição
+            // Teleportar Mario para a nova position
             Vector3 newPos = transform.position + knockbackVector;
             SM64Mario sm64 = GetComponent<SM64Mario>();
             if (sm64 != null)
@@ -384,7 +384,7 @@ namespace ParkourRL
 
         void OnDrawGizmosSelected()
         {
-            // Desenhar linha para o inimigo mais próximo valido
+            // Draw line to nearest valid enemy
             var validRivals = GetValidAgents(rivals);
             if (validRivals.Count > 0)
             {
@@ -392,7 +392,7 @@ namespace ParkourRL
                 Gizmos.DrawLine(transform.position, validRivals[0].transform.position);
             }
 
-            // Desenhar saúde
+            // Draw health
             Gizmos.color = currentHealth > maxHealth * 0.5f ? Color.green : Color.yellow;
             if (currentHealth <= 0) Gizmos.color = Color.red;
             Gizmos.DrawWireCube(transform.position + Vector3.up * 2f, Vector3.one * 0.5f);

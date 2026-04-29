@@ -11,54 +11,54 @@ namespace ParkourRL
         [Header("Mario Setup")]
         [SerializeField] private GameObject marioPrefab;
         [SerializeField] private Material marioMaterial;
-        [Tooltip("Usa um modelo base para warm-start do Mario no BehaviorParameters.")]
+        [Tooltip("Uses a base model for warm-starting Mario in BehaviorParameters.")]
         [SerializeField] private bool useWarmStartModel = true;
         [SerializeField] private NNModel warmStartModel;
-        [Tooltip("Caminho do asset para auto-carregar o modelo no editor quando o campo acima estiver vazio.")]
+        [Tooltip("Asset path to auto-load the model in the editor when the field above is empty.")]
         [SerializeField] private string warmStartModelAssetPath = "Assets/ParkourRL/Models/mario_parkour_baseV1.onnx";
 
         [Header("Level Elements")]
         [SerializeField] private Transform goal;
-        [Tooltip("Defina manualmente os locais de spawn no Inspector.")]
+        [Tooltip("Manually set spawn locations in the Inspector.")]
         [SerializeField] private List<Transform> spawnPoints = new List<Transform>();
-        [Tooltip("Indice do spawnpoint utilizado para treino e respawn.")]
+        [Tooltip("Index of the spawnpoint used for training and respawn.")]
         [SerializeField] private int selectedSpawnPointIndex = 0;
 
         [Header("Curriculum")]
-        [Tooltip("Seleciona automaticamente o spawnpoint com base na licao atual do curriculum.")]
+        [Tooltip("Automatically selects the spawnpoint based on the current curriculum lesson.")]
         [SerializeField] private bool useCurriculumLessonForSpawn = true;
-        [Tooltip("Nome do Environment Parameter que guarda a licao atual.")]
+        [Tooltip("Name of the Environment Parameter that stores the current lesson.")]
         [SerializeField] private string curriculumLessonParameter = "spawn_lesson";
-        [Tooltip("Se ligado, licao 0 usa o primeiro item da lista; se desligado, usa o ultimo.")]
+        [Tooltip("If on, lesson 0 uses the first item in the list; if off, uses the last.")]
         [SerializeField] private bool lessonZeroUsesFirstSpawnPoint = true;
-        [Tooltip("Forca manualmente um spawnpoint fixo, ignorando o curriculum.")]
+        [Tooltip("Manually forces a fixed spawnpoint, ignoring the curriculum.")]
         [SerializeField] private bool useManualSpawnPointOverride = false;
-        [Tooltip("Spawnpoint manual usado quando o override esta ativo.")]
+        [Tooltip("Manual spawnpoint used when the override is active.")]
         [SerializeField] private int manualSpawnPointIndex = 0;
 
         [Header("Randomization")]
         [SerializeField] private bool randomizePlatforms = false;
-        [Tooltip("Usa a licao do curriculum para escalar a randomizacao.")]
+        [Tooltip("Uses the curriculum lesson to scale randomization.")]
         [SerializeField] private bool useCurriculumForRandomization = true;
-        [Tooltip("Range maximo usado quando a randomizacao estiver no valor final.")]
+        [Tooltip("Maximum range used when randomization is at its final value.")]
         [SerializeField] private float platformRandomizationRange = 0.5f;
-        [Tooltip("Range manual usado quando o curriculum esta desligado.")]
+        [Tooltip("Manual range used when the curriculum is off.")]
         [SerializeField] private float manualPlatformRandomizationRange = 0.15f;
-        [Tooltip("A randomizacao so entra quando a licao do curriculum atingir este valor. Aumentado para 10 para manter licoes 0-4 fixas.")]
+        [Tooltip("Randomization only activates when the curriculum lesson reaches this value. Increased to 10 to keep lessons 0-4 fixed.")]
         [SerializeField] private int randomizationStartsAtLesson = 10;
-        [Tooltip("Licao na qual a randomizacao atinge o valor maximo configurado.")]
+        [Tooltip("Lesson at which randomization reaches the configured maximum value.")]
         [SerializeField] private int randomizationMaxesAtLesson = 4;
 
         [Header("Advanced Phases (5-8)")]
-        [Tooltip("Variação máxima de spawn/goal em metros para fases 8+.")]
+        [Tooltip("Maximum spawn/goal variation in meters for phases 8+.")]
         [SerializeField] private float fullMapSpawnVariationRange = 1.0f;
 
         [Header("Win-Rate Cycle (Infinite)")]
-        [Tooltip("Quando ativo, ignora avanço por reward e alterna entre mapa fixo e mapa random usando win-rate.")]
+        [Tooltip("When active, ignores reward-based progression and toggles between fixed and random map using win-rate.")]
         [SerializeField] private bool useWinRateCycle = true;
-        [Tooltip("Quantidade de episodios usados para calcular win-rate.")]
+        [Tooltip("Number of episodes used to calculate win-rate.")]
         [SerializeField] private int winRateWindowSize = 10;
-        [Tooltip("Taxa minima de vitoria para alternar entre mapa fixo e random.")]
+        [Tooltip("Minimum win rate to toggle between fixed and random map.")]
         [Range(0.0f, 1.0f)]
         [SerializeField] private float winRateThreshold = 0.7f;
 
@@ -67,9 +67,9 @@ namespace ParkourRL
         [SerializeField] private float environmentSpacing = 30f;
 
         [Header("Per-Env Diversification")]
-        [Tooltip("Aplica um offset fixo por env (spawn e goal) para evitar decoracao entre envs paralelos.")]
+        [Tooltip("Applies a fixed offset per env (spawn and goal) to prevent correlation between parallel envs.")]
         [SerializeField] private bool diversifyEachEnvironment = true;
-        [Tooltip("Range em metros do offset por env no plano XZ.")]
+        [Tooltip("Range in meters of the offset per env on the XZ plane.")]
         [SerializeField] private float perEnvironmentVariationRange = 1.0f;
 
         private Vector3 currentSpawnPoint;
@@ -150,7 +150,7 @@ namespace ParkourRL
             {
                 if (!warnedMissingSpawnPoints)
                 {
-                    Debug.LogWarning("[ParkourEnv] Nenhum spawnpoint manual configurado. Usando posicao do ParkourEnvironment.");
+                    Debug.LogWarning("[ParkourEnv] No manual spawnpoint configured. Using ParkourEnvironment position.");
                     warnedMissingSpawnPoints = true;
                 }
                 baseSpawn = transform.position;
@@ -192,11 +192,11 @@ namespace ParkourRL
 
         void Start()
         {
-            // PASSO 1: Garantir MeshColliders em TODAS as plataformas SM64StaticTerrain
-            // DEVE rodar ANTES de qualquer RefreshStaticTerrain!
+            // STEP 1: Ensure MeshColliders on ALL SM64StaticTerrain platforms
+            // MUST run BEFORE any RefreshStaticTerrain!
             EnsureAllMeshColliders();
 
-            // PASSO 2: Instanciar ambientes paralelos (se for o ambiente principal)
+            // STEP 2: Instantiate parallel environments (if this is the main environment)
             if (parallelEnvironments > 1 && transform.parent == null)
             {
                 SpawnParallelEnvironments();
@@ -207,26 +207,26 @@ namespace ParkourRL
 
         private IEnumerator RefreshTerrainAndSpawnMario()
         {
-            // Espera o ciclo de fisica para garantir que os colliders recem-criados estejam prontos.
+            // Wait for the physics cycle to ensure newly created colliders are ready.
             yield return new WaitForFixedUpdate();
 
-            // PASSO 3: Agora sim, recarregar terreno no SM64 com TODAS as plataformas
+            // STEP 3: Now reload terrain in SM64 with ALL platforms
             SM64Context.RefreshStaticTerrain();
             LogTerrainInfo();
 
-            // PASSO 4: Aplicar selecao por curriculum antes do primeiro spawn
+            // STEP 4: Apply curriculum selection before the first spawn
             UpdateSpawnSelectionFromCurriculum();
             currentSpawnPoint = GetSelectedSpawnPosition();
             ApplyPerEnvironmentOffsets();
 
-            // PASSO 5: Spawnar Mario
+            // STEP 5: Spawn Mario
             SpawnMario();
         }
 
         /// <summary>
-        /// Garante MeshCollider em todas as plataformas SM64StaticTerrain.
-        /// Nesta versao, os cubos sao GIGANTES e afundados (padrao pipescene),
-        /// as paredes ficam distantes e nao bloqueiam o Mario.
+        /// Ensures MeshCollider on all SM64StaticTerrain platforms.
+        /// In this version, the cubes are GIANT and sunken (pipescene default),
+        /// the walls are far away and do not block Mario.
         /// </summary>
         private void EnsureAllMeshColliders()
         {
@@ -251,17 +251,17 @@ namespace ParkourRL
                 Debug.Log($"[ParkourEnv] Terreno '{terrain.gameObject.name}' pos={terrain.transform.position} scale={terrain.transform.lossyScale} MC={(mc != null)}");
             }
             
-            Debug.Log($"[ParkourEnv] {terrains.Length} plataformas verificadas, {fixed_count} MeshColliders adicionados");
+            Debug.Log($"[ParkourEnv] {terrains.Length} platforms verified, {fixed_count} MeshColliders added");
         }
 
         /// <summary>
-        /// Log diagnostico para verificar quantas superficies o SM64 carregou
+        /// Diagnostic log to check how many surfaces SM64 loaded
         /// </summary>
         private void LogTerrainInfo()
         {
             SM64StaticTerrain[] terrains = FindObjectsOfType<SM64StaticTerrain>();
-            Debug.Log($"[ParkourEnv] === DIAGNOSTICO DE TERRENO SM64 ===");
-            Debug.Log($"[ParkourEnv] Total de plataformas SM64StaticTerrain: {terrains.Length}");
+            Debug.Log($"[ParkourEnv] === SM64 TERRAIN DIAGNOSTICS ===");
+            Debug.Log($"[ParkourEnv] Total SM64StaticTerrain platforms: {terrains.Length}");
             
             foreach (var t in terrains)
             {
@@ -275,15 +275,15 @@ namespace ParkourRL
                           $"MeshCollider={hasMC}, Mesh={hasMesh}, Tris={triCount}");
             }
             
-            // Usar metodo publico do SM64Context para contar superficies
+            // Use public SM64Context method to count surfaces
             int surfaceCount = SM64Context.GetStaticSurfaceCount();
-            Debug.Log($"[ParkourEnv] Total de superficies SM64 carregadas: {surfaceCount}");
-            Debug.Log($"[ParkourEnv] === FIM DIAGNOSTICO ===");
+            Debug.Log($"[ParkourEnv] Total SM64 surfaces loaded: {surfaceCount}");
+            Debug.Log($"[ParkourEnv] === END DIAGNOSTICS ===");
         }
 
         private void SpawnParallelEnvironments()
         {
-            Debug.Log($"[ParkourEnv] Instanciando {parallelEnvironments - 1} ambientes paralelos...");
+            Debug.Log($"[ParkourEnv] Instantiating {parallelEnvironments - 1} parallel environments...");
             
             List<GameObject> scenePlatforms = new List<GameObject>();
             foreach (var terrain in FindObjectsOfType<SM64StaticTerrain>())
@@ -299,7 +299,7 @@ namespace ParkourRL
                 GameObject envRoot = new GameObject($"ParallelEnv_{i}");
                 envRoot.transform.position = offset;
                 
-                // Clonar cada plataforma
+                // Clone each platform
                 foreach (var platform in scenePlatforms)
                 {
                     GameObject clone = Instantiate(platform, 
@@ -309,7 +309,7 @@ namespace ParkourRL
                     clone.name = platform.name + $"_Env{i}";
                     clone.transform.localScale = platform.transform.localScale;
                     
-                    // Garantir MeshCollider no clone
+                    // Ensure MeshCollider on clone
                     if (clone.GetComponent<MeshCollider>() == null)
                     {
                         MeshFilter mf = clone.GetComponent<MeshFilter>();
@@ -322,7 +322,7 @@ namespace ParkourRL
                     }
                 }
                 
-                // Clonar Goal
+                // Clone Goal
                 GameObject goalClone = null;
                 if (goal != null)
                 {
@@ -334,7 +334,7 @@ namespace ParkourRL
                     goalClone.tag = "Goal";
                 }
                 
-                // Clonar os spawnpoints manuais
+                // Clone manual spawnpoints
                 List<Transform> clonedSpawnPoints = new List<Transform>();
                 if (spawnPoints != null)
                 {
@@ -359,13 +359,13 @@ namespace ParkourRL
                     clonedSpawnPoints.Add(fallbackSpawn.transform);
                 }
                 
-                // Criar ParkourEnvironment para esta copia
+                // Create ParkourEnvironment for this copy
                 GameObject envControllerObj = new GameObject($"ParkourController_Env{i}");
                 envControllerObj.transform.position = offset;
                 envControllerObj.transform.parent = envRoot.transform;
                 
                 ParkourEnvironment envScript = envControllerObj.AddComponent<ParkourEnvironment>();
-                envScript.parallelEnvironments = 0; // Impede recursao
+                envScript.parallelEnvironments = 0; // Prevents recursion
                 envScript.goal = goalClone != null ? goalClone.transform : null;
                 envScript.marioPrefab = this.marioPrefab;
                 envScript.marioMaterial = this.marioMaterial;
@@ -388,7 +388,7 @@ namespace ParkourRL
                 envScript.diversifyEachEnvironment = this.diversifyEachEnvironment;
                 envScript.perEnvironmentVariationRange = this.perEnvironmentVariationRange;
                 
-                // Forca re-inicializacao das posicoes originais APOS os valores (goal, spawn) terem sido copiados!
+                // Forces re-initialization of original positions AFTER values (goal, spawn) have been copied!
                 envScript.InitializeOriginalPositions();
                 
                 parallelInstances.Add(new ParallelEnvInstance
@@ -399,7 +399,7 @@ namespace ParkourRL
                 });
             }
             
-            Debug.Log($"[ParkourEnv] {parallelEnvironments - 1} ambientes paralelos criados.");
+            Debug.Log($"[ParkourEnv] {parallelEnvironments - 1} parallel environments created.");
         }
 
         public void ResetEnvironment()
@@ -416,7 +416,7 @@ namespace ParkourRL
                 RandomizeSpawnAndGoal(randomizationRange);
             }
 
-            // No modo random do ciclo infinito, aplica variacao adicional no spawn e no goal.
+            // In random mode of the infinite cycle, apply additional variation to spawn and goal.
             if (useWinRateCycle && randomModeEnabled)
             {
                 float spawnVariationX = Random.Range(-fullMapSpawnVariationRange, fullMapSpawnVariationRange);
@@ -531,24 +531,24 @@ namespace ParkourRL
 
         private void UpdateSpawnSelectionFromCurriculum()
         {
-            // Com win-rate cycle, o spawn point eh controlado pelo ReportEpisodeResult (avanço de lição)
-            // Mas ainda aplicamos o clamping para garantir que nao saia dos limites
+            // With win-rate cycle, the spawn point is controlled by ReportEpisodeResult (lesson advancement)
+            // But we still apply clamping to ensure it doesn't go out of bounds
             if (useWinRateCycle)
             {
                 selectedSpawnPointIndex = Mathf.Clamp(selectedSpawnPointIndex, 0, spawnPoints.Count - 1);
                 return;
             }
 
-            // MODO CURRICULUM SIMPLIFICADO: Sempre usar o ULTIMO spawn point (mapa todo desbloqueado)
-            // Isso faz o agente treinar direto no percurso completo
+            // SIMPLIFIED CURRICULUM MODE: Always use the LAST spawn point (full map unlocked)
+            // This makes the agent train directly on the full course
             if (useCurriculumLessonForSpawn && spawnPoints != null && spawnPoints.Count > 0)
             {
-                // Ir direto para o ultimo spawn point (percurso mais longo/dificil)
+                // Go directly to the last spawn point (longest/hardest course)
                 int lastIndex = spawnPoints.Count - 1;
                 if (selectedSpawnPointIndex != lastIndex)
                 {
                     selectedSpawnPointIndex = lastIndex;
-                    Debug.Log($"[ParkourEnv] Curriculum Mode: Usando ultimo spawn point [{selectedSpawnPointIndex}] - Mapa todo desbloqueado");
+                    Debug.Log($"[ParkourEnv] Curriculum Mode: Using last spawn point [{selectedSpawnPointIndex}] - Full map unlocked");
                 }
                 return;
             }
@@ -579,24 +579,24 @@ namespace ParkourRL
             float winRate = (float)wins / targetWindow;
             if (winRate >= winRateThreshold)
             {
-                // Avanca para o proximo spawn point (proxima lição)
+                // Advance to the next spawn point (next lesson)
                 int oldSpawnIndex = selectedSpawnPointIndex;
                 selectedSpawnPointIndex = Mathf.Min(selectedSpawnPointIndex + 1, spawnPoints.Count - 1);
                 recentEpisodeResults.Clear();
 
                 if (selectedSpawnPointIndex != oldSpawnIndex)
                 {
-                    Debug.Log($"[ParkourEnv] Win-rate {winRate:P0} atingiu meta ({winRateThreshold:P0}). Avançando: spawnPoints[{oldSpawnIndex}] -> spawnPoints[{selectedSpawnPointIndex}]");
+                    Debug.Log($"[ParkourEnv] Win-rate {winRate:P0} reached target ({winRateThreshold:P0}). Advancing: spawnPoints[{oldSpawnIndex}] -> spawnPoints[{selectedSpawnPointIndex}]");
                 }
                 else
                 {
-                    Debug.Log($"[ParkourEnv] Win-rate {winRate:P0} atingiu meta ({winRateThreshold:P0}). Já está no spawn final [spawnPoints[{selectedSpawnPointIndex}]]. Alternando modo random.");
+                    Debug.Log($"[ParkourEnv] Win-rate {winRate:P0} reached target ({winRateThreshold:P0}). Already at final spawn [spawnPoints[{selectedSpawnPointIndex}]]. Toggling random mode.");
                     randomModeEnabled = !randomModeEnabled;
                 }
             }
             else
             {
-                Debug.Log($"[ParkourEnv] Win-rate atual: {winRate:P0} ({wins}/{targetWindow}) | Spawn: [{selectedSpawnPointIndex}]");
+                Debug.Log($"[ParkourEnv] Current win-rate: {winRate:P0} ({wins}/{targetWindow}) | Spawn: [{selectedSpawnPointIndex}]");
             }
         }
 
@@ -611,7 +611,7 @@ namespace ParkourRL
                 
                 if (marioPrefab == null)
                 {
-                    Debug.LogError("[ParkourEnv] Mario prefab nao atribuido!");
+                    Debug.LogError("[ParkourEnv] Mario prefab not assigned!");
                     return;
                 }
             }
@@ -622,7 +622,7 @@ namespace ParkourRL
             currentMario.SetActive(false);
             currentMario.transform.position = spawnPos;
             
-            // Adicionar agente RL PRIMEIRO
+            // Add RL agent FIRST
             MarioRLAgent agent = currentMario.AddComponent<MarioRLAgent>();
             
             // Input provider
@@ -631,7 +631,7 @@ namespace ParkourRL
             // SM64Mario
             SM64Mario sm64Mario = currentMario.AddComponent<SM64Mario>();
             
-            // Configurar material
+            // Configure material
             Material matToUse = marioMaterial;
             if (matToUse == null)
             {
@@ -652,7 +652,7 @@ namespace ParkourRL
                     materialField.SetValue(sm64Mario, matToUse);
             }
 
-            // Configurar Behavior Parameters
+            // Configure Behavior Parameters
             var behaviorParams = currentMario.GetComponent<Unity.MLAgents.Policies.BehaviorParameters>();
             if (behaviorParams == null) 
                 behaviorParams = currentMario.AddComponent<Unity.MLAgents.Policies.BehaviorParameters>();
@@ -666,10 +666,10 @@ namespace ParkourRL
             }
             behaviorParams.BrainParameters.VectorObservationSize = 30;
             behaviorParams.BrainParameters.NumStackedVectorObservations = 1;
-            // 2 acoes continuas (joystick X/Y) + 1 discreta (Jump com 2 opcoes: 0=nao, 1=sim)
+            // 2 continuous actions (joystick X/Y) + 1 discrete (Jump with 2 options: 0=no, 1=yes)
             behaviorParams.BrainParameters.ActionSpec = new Unity.MLAgents.Actuators.ActionSpec(2, new int[] { 2 });
 
-            // Decision Requester (estilo old: 2 para respostas mais rapidas em plataforma/salto)
+            // Decision Requester (old style: 2 for faster responses in platform/jumping)
             var decisionRequester = currentMario.GetComponent<Unity.MLAgents.DecisionRequester>();
             if (decisionRequester == null)
                 decisionRequester = currentMario.AddComponent<Unity.MLAgents.DecisionRequester>();
@@ -741,7 +741,7 @@ namespace ParkourRL
             if (!invalidRespawn)
                 yield break;
 
-            Debug.LogWarning($"[ParkourEnv] Respawn inconsistente detectado. Forcando reposicionamento. Esperado={expectedPosition} Atual={marioPos}");
+            Debug.LogWarning($"[ParkourEnv] Inconsistent respawn detected. Forcing repositioning. Esperado={expectedPosition} Atual={marioPos}");
 
             SM64Mario sm64Mario = currentMario.GetComponent<SM64Mario>();
             currentMario.transform.position = expectedPosition;

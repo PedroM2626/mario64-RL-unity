@@ -7,28 +7,28 @@ namespace ParkourRL.HybridSystem
 {
     /// <summary>
     /// Grava dados para Imitation Learning e Offline RL.
-    /// Salva transições (obs, action, reward, next_obs, done) em formato JSON e CSV.
+    /// Saves transitions (obs, action, reward, next_obs, done) in JSON and CSV format.
     /// </summary>
     public class HybridDataRecorder : MonoBehaviour
     {
         [Header("Output Settings")]
-        [Tooltip("Diretório base para salvar dados")]
+        [Tooltip("Base directory to save data")]
         [SerializeField] private string outputDirectory = "HybridTrainingData";
         
-        [Tooltip("Formato de saída: JSON, CSV, ou ambos")]
+        [Tooltip("Output format: JSON, CSV, or both")]
         [SerializeField] private OutputFormat outputFormat = OutputFormat.Both;
         
-        [Tooltip("Nome do arquivo (sem extensão)")]
+        [Tooltip("File name (without extension)")]
         [SerializeField] private string fileName = "hybrid_episodes";
         
-        [Tooltip("Número máximo de episódios por arquivo")]
+        [Tooltip("Maximum number of episodes per file")]
         [SerializeField] private int maxEpisodesPerFile = 100;
 
         [Header("Data Quality")]
-        [Tooltip("Intervalo mínimo entre gravações (segundos)")]
+        [Tooltip("Minimum interval between recordings (seconds)")]
         [SerializeField] private float minRecordInterval = 0.05f;  // 20 FPS
         
-        [Tooltip("Número máximo de steps por episódio")]
+        [Tooltip("Maximum number of steps per episode")]
         [SerializeField] private int maxStepsPerEpisode = 2000;
 
         public enum OutputFormat
@@ -63,7 +63,7 @@ namespace ParkourRL.HybridSystem
             if (!Directory.Exists(path))
             {
                 Directory.CreateDirectory(path);
-                Debug.Log($"[HybridRecorder] Diretório criado: {path}");
+                Debug.Log($"[HybridRecorder] Directory created: {path}");
             }
             
             currentFilePath = GetNextFilePath();
@@ -90,7 +90,7 @@ namespace ParkourRL.HybridSystem
                 transitions = new List<TransitionData>()
             };
             
-            Debug.Log($"[HybridRecorder] Episódio {episodeCounter} iniciado");
+            Debug.Log($"[HybridRecorder] Episode {episodeCounter} started");
             OnEpisodeStarted?.Invoke();
         }
 
@@ -150,7 +150,7 @@ namespace ParkourRL.HybridSystem
             episodeBatch.Add(currentEpisode);
             episodeCounter++;
             
-            Debug.Log($"[HybridRecorder] Episódio {currentEpisode.episodeId} salvo. " +
+            Debug.Log($"[HybridRecorder] Episode {currentEpisode.episodeId} saved. " +
                      $"Success={success}, Steps={currentEpisode.stepCount}, " +
                      $"Reward={currentEpisode.totalReward:F2}");
             
@@ -195,17 +195,17 @@ namespace ParkourRL.HybridSystem
                     SaveAsCSV(csvPath);
                 }
                 
-                Debug.Log($"[HybridRecorder] Batch salvo: {episodeBatch.Count} episódios");
+                Debug.Log($"[HybridRecorder] Batch saved: {episodeBatch.Count} episodes");
                 OnDataSaved?.Invoke(currentFilePath);
                 
-                // Preparar próximo batch
+                // Preparar next batch
                 episodeBatch.Clear();
                 fileCounter++;
                 currentFilePath = GetNextFilePath();
             }
             catch (Exception e)
             {
-                Debug.LogError($"[HybridRecorder] Erro ao salvar: {e.Message}");
+                Debug.LogError($"[HybridRecorder] Error ao salvar: {e.Message}");
             }
         }
 
@@ -309,7 +309,7 @@ namespace ParkourRL.HybridSystem
             FlushBatch();
         }
 
-        // Estruturas de dados serializáveis
+        // Serializable data structures
         [Serializable]
         private class DataWrapper
         {

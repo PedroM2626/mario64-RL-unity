@@ -3,7 +3,7 @@ using UnityEngine;
 namespace ParkourRL.HybridSystem
 {
     /// <summary>
-    /// Inicializa a cena com GameObjects mínimos para o treinamento híbrido.
+    /// Initializes the scene with minimal GameObjects for hybrid training.
     /// Cria cubes simples representando Mario player e AI.
     /// </summary>
     public class SceneInitializer : MonoBehaviour
@@ -26,7 +26,7 @@ namespace ParkourRL.HybridSystem
         {
             Debug.Log("[SceneInitializer] Inicializando cena...");
 
-            // Criar spawn points se não existirem
+            // Create spawn points if they don't exist
             if (playerSpawnPoint == null)
             {
                 GameObject playerSpawn = new GameObject("PlayerSpawn");
@@ -139,7 +139,7 @@ namespace ParkourRL.HybridSystem
             int platformCount = 5;
             for (int i = 0; i < platformCount; i++)
             {
-                // Verificar se plataforma já existe
+                // Check if platform already exists
                 if (GameObject.Find("Platform_" + i) != null) continue;
 
                 GameObject platform = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -153,7 +153,7 @@ namespace ParkourRL.HybridSystem
                 mat.color = Color.green;
                 renderer.material = mat;
 
-                // Remover Rigidbody (plataforma estática)
+                // Remover Rigidbody (plataforma istica)
                 Rigidbody rb = platform.GetComponent<Rigidbody>();
                 if (rb != null) Destroy(rb);
             }

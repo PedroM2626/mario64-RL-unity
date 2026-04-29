@@ -27,7 +27,7 @@ behaviors:
         encoding_size: 128
         learning_rate: 0.0003
 
-    # Self-play para competição em times
+    # Self-play for team competition
     self_play:
       save_steps: 50000
       team_change: 100000

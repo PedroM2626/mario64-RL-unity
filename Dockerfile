@@ -1,6 +1,6 @@
 FROM python:3.9-slim
 
-# Instalar dependências de sistema necessárias
+# Install required system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
@@ -8,15 +8,15 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Instalar dependências Python
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar projeto
+# Copy project
 COPY . .
 
-# Expor porta do MLflow
+# Expose MLflow port
 EXPOSE 5000
 
-# Comando padrão
+# Default command
 CMD ["python", "train_mlops.py"]

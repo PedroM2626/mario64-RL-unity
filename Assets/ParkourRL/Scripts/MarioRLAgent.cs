@@ -18,12 +18,12 @@ namespace ParkourRL
         [SerializeField] private ParkourEnvironment environment;
         [SerializeField] private Transform targetGoal;
         
-        [Header("Plataformas Dinâmicas")]
-        [Tooltip("Detectar plataformas SM64StaticTerrain automaticamente")]
+        [Header("Dynamic Platforms")]
+        [Tooltip("Automatically detect SM64StaticTerrain platforms")]
         [SerializeField] private bool autoDetectPlatforms = true;
-        [Tooltip("Recompensa por alcançar cada plataforma")]
+        [Tooltip("Reward for reaching each platform")]
         [SerializeField] private float platformReward = 15f;
-        [Tooltip("Raio de tolerância para considerar que chegou na plataforma (usa o maior: este valor ou metade do tamanho da plataforma)")]
+        [Tooltip("Tolerance radius to consider reaching the platform (uses the larger: this value or half the platform size)")]
         [SerializeField] private float platformReachRadius = 3f;
 
         [Header("Observations")]
@@ -42,20 +42,20 @@ namespace ParkourRL
         private float previousDistanceToGoal;
         private float episodeTime;
         private float bestDistanceToGoal;
-        private float bestDistanceWhileGrounded; // Rastreia o progresso SEGURO (quando ele pousa em uma plataforma)
+        private float bestDistanceWhileGrounded; // Tracks SAFE progress (when he lands on a platform)
         private bool episodeResultReported;
         
-        private int currentPlatformIndex = 0; // Próxima plataforma que o Mario deve alcançar
+        private int currentPlatformIndex = 0; // Next platform Mario must reach
         private bool[] platformsReached;
-        private Collider[] detectedPlatforms; // Colliders das plataformas detectadas
-        private Vector3[] platformCenters; // Centros calculados das plataformas
+        private Collider[] detectedPlatforms; // Colliders of detected platforms
+        private Vector3[] platformCenters; // Calculated centers of platforms
         
-        // Checkpoint dinamico - proximidade a proxima plataforma
+        // Dynamic checkpoint - proximity to next platform
         private float initialDistanceToNextPlatform;
         private float bestDistanceToNextPlatform;
         private float previousDistanceToNextPlatform;
 
-        private const float MAX_EPISODE_TIME = 30f; // Estilo old: mais episodios por hora para convergir mais rapido
+        private const float MAX_EPISODE_TIME = 30f; // Old style: more episodes per hour to converge faster
         
         // Cache array for Raycasts to prevent ALLOC_TEMP_MAIN leakage
         private RaycastHit[] raycastHitsCache = new RaycastHit[1];
@@ -90,7 +90,7 @@ namespace ParkourRL
             if (environment != null)
             {
                 environment.ResetEnvironment();
-                // Apos o reset (que teleporta o Mario), atualizamos a startPosition para refletir o spawn real
+                // After reset (which teleports Mario), update startPosition to reflect actual spawn
                 startPosition = environment.GetCurrentSpawnPoint();
             }
             else
@@ -106,12 +106,12 @@ namespace ParkourRL
             initialDistanceToGoal = GetDistanceToGoal();
             previousDistanceToGoal = initialDistanceToGoal;
             bestDistanceToGoal = initialDistanceToGoal;
-            bestDistanceWhileGrounded = initialDistanceToGoal; // Inicia a distancia segura
+            bestDistanceWhileGrounded = initialDistanceToGoal; // Initialize safe distance
             previousPosition = transform.position;
             episodeTime = 0f;
             episodeResultReported = false;
             
-            // Detectar e resetar plataformas
+            // Detect and reset platforms
             DetectPlatforms();
             currentPlatformIndex = 0;
             if (detectedPlatforms != null && detectedPlatforms.Length > 0)
@@ -119,14 +119,14 @@ namespace ParkourRL
                 platformsReached = new bool[detectedPlatforms.Length];
             }
             
-            // Inicializar distancias do checkpoint (proxima plataforma)
+            // Initialize checkpoint distances (next platform)
             InitializeCheckpointDistances();
 
         }
 
         public override void CollectObservations(VectorSensor sensor)
         {
-            // Forcar VectorObservationSize correto
+            // Force correct VectorObservationSize
             var behaviorParams = GetComponent<Unity.MLAgents.Policies.BehaviorParameters>();
             if (behaviorParams != null && behaviorParams.BrainParameters.VectorObservationSize != 30)
             {
@@ -137,12 +137,12 @@ namespace ParkourRL
             Vector3 envOffset = environment != null ? environment.transform.position : Vector3.zero;
             Vector3 localPosition = position - envOffset;
 
-            // [3 obs] Posicao do Mario (normalizada e RELATIVA ao ambiente)
+            // [3 obs] Mario position (normalized and RELATIVE to the environment)
             sensor.AddObservation(localPosition.x / 25f);
             sensor.AddObservation(localPosition.y / 10f);
             sensor.AddObservation(localPosition.z / 25f);
 
-            // [4 obs] Direcao e distancia ao objetivo
+            // [4 obs] Direction and distance to goal
             if (targetGoal != null)
             {
                 Vector3 toGoal = targetGoal.position - position;
@@ -159,17 +159,17 @@ namespace ParkourRL
                 sensor.AddObservation(0f);
             }
 
-            // [3 obs] Velocidade do Mario
+            // [3 obs] Mario velocity
             Vector3 velocity = (position - previousPosition) / Mathf.Max(Time.fixedDeltaTime, 0.001f);
             sensor.AddObservation(Mathf.Clamp(velocity.x / 10f, -1f, 1f));
             sensor.AddObservation(Mathf.Clamp(velocity.y / 10f, -1f, 1f));
             sensor.AddObservation(Mathf.Clamp(velocity.z / 10f, -1f, 1f));
 
-            // [1 obs] Esta no ar?
+            // [1 obs] Is airborne?
             bool isGrounded = Physics.RaycastNonAlloc(position + Vector3.up * 0.1f, Vector3.down, raycastHitsCache, 0.5f) > 0;
             sensor.AddObservation(isGrounded ? 0f : 1f);
 
-            // [16 obs] Raycasts para detectar terreno/obstaculos (sem layer mask)
+            // [16 obs] Raycasts to detect terrain/obstacles (no layer mask)
             for (int i = 0; i < raycastCount; i++)
             {
                 float angle = (360f / raycastCount) * i;
@@ -182,25 +182,25 @@ namespace ParkourRL
                 }
                 else
                 {
-                    sensor.AddObservation(1f); // Nada detectado = distancia maxima
+                    sensor.AddObservation(1f); // Nothing detected = maximum distance
                     sensor.AddObservation(0f);
                 }
             }
 
-            // [1 obs] Altura do chao abaixo
+            // [1 obs] Ground height below
             if (Physics.RaycastNonAlloc(position + Vector3.up * 0.5f, Vector3.down, raycastHitsCache, 20f) > 0)
             {
                 sensor.AddObservation(raycastHitsCache[0].distance / 20f);
             }
             else
             {
-                sensor.AddObservation(1f); // Sem chao = caindo
+                sensor.AddObservation(1f); // No ground = falling
             }
 
-            // [1 obs] Jump button ativo
+            // [1 obs] Jump button active
             sensor.AddObservation(jumpPressed ? 1f : 0f);
 
-            // [1 obs] Tempo normalizado
+            // [1 obs] Normalized time
             sensor.AddObservation(episodeTime / MAX_EPISODE_TIME);
 
             // Total: 3 + 4 + 3 + 1 + 16 + 1 + 1 + 1 = 30
@@ -208,18 +208,18 @@ namespace ParkourRL
 
         public override void OnActionReceived(ActionBuffers actions)
         {
-            // Acoes continuas: joystick
+            // Continuous actions: joystick
             joystickInput = new Vector2(
                 Mathf.Clamp(actions.ContinuousActions[0], -1f, 1f),
                 Mathf.Clamp(actions.ContinuousActions[1], -1f, 1f)
             );
 
-            // Acao discreta: Jump + Kick (para o modo competitivo tambem)
+            // Discrete action: Jump + Kick (for competitive mode too)
             jumpPressed = actions.DiscreteActions[0] == 1;
             kickPressed = false;
             stompPressed = false;
 
-            // Apontar camera para o goal (direcao do movimento)
+            // Point camera toward goal (movement direction)
             if (targetGoal != null)
             {
                 cameraLookDirection = (targetGoal.position - transform.position).normalized;
@@ -228,26 +228,26 @@ namespace ParkourRL
                     cameraLookDirection = Vector3.forward;
             }
 
-            // ========== REWARD ESTILO OLD (COMPLETAR PARKOUR DE VERDADE) ==========
+            // ========== OLD STYLE REWARD (COMPLETE THE REAL PARKOUR) ==========
             episodeTime += Time.fixedDeltaTime;
             Vector3 currentPos = transform.position;
             float currentDistance = GetDistanceToGoal();
             float distanceDelta = previousDistanceToGoal - currentDistance;
 
-            // Pressao temporal clara para evitar ficar parado em uma plataforma.
+            // Clear time pressure to prevent staying idle on a platform.
             AddReward(-0.01f);
 
-            // ===== REWARD DE CHECKPOINT: Proximidade a proxima plataforma =====
-            // Isso evita que o Mario se jogue no void tentando ir direto ao goal
+            // ===== CHECKPOINT REWARD: Proximity to next platform =====
+            // This prevents Mario from jumping into the void trying to go directly to the goal
             UpdateCheckpointReward();
 
-            // Recompensa densa por progresso real na direcao do goal.
+            // Dense reward for real progress toward the goal.
             if (distanceDelta > 0.01f)
             {
                 AddReward(distanceDelta * 1.0f);
             }
 
-            // Marco intermediario de progresso para estabilizar exploracao.
+            // Intermediate progress milestone to stabilize exploration.
             if (currentDistance < bestDistanceToGoal - 2.0f)
             {
                 AddReward(2.0f);
@@ -257,7 +257,7 @@ namespace ParkourRL
             previousDistanceToGoal = currentDistance;
             previousPosition = currentPos;
 
-            // Queda: penalidade forte, mas sem impedir exploracao por completo.
+            // Fall: strong penalty, but without completely preventing exploration.
             if (currentPos.y < startPosition.y - 3.0f)
             {
                 AddReward(-5.0f);
@@ -266,7 +266,7 @@ namespace ParkourRL
                 return;
             }
 
-            // Timeout proporcional ao progresso (estilo old): pune travamento, recompensa tentativa real.
+            // Timeout proportional to progress (old style): punishes stalling, rewards real attempt.
             if (episodeTime >= MAX_EPISODE_TIME)
             {
                 float progressRatio = 1.0f - (currentDistance / Mathf.Max(initialDistanceToGoal, 0.1f));
@@ -276,17 +276,17 @@ namespace ParkourRL
                 return;
             }
 
-            // Log periodico
+            // Periodic log
             if (StepCount % 500 == 0 && StepCount > 0)
             {
                 Debug.Log($"[Mario] Step {StepCount}: Dist={currentDistance:F1}, Best={bestDistanceToGoal:F1}, " +
                           $"Reward={GetCumulativeReward():F2}, Pos={currentPos}, Y={currentPos.y:F2}");
             }
 
-            // Verificacao de plataformas - recompensa por seguir o caminho correto
+            // Platform check - reward for following the correct path
             CheckPlatforms();
 
-            // Verificacao imediata de proximidade do goal - usa area aproximada
+            // Immediate goal proximity check - uses approximate area
             if (IsInGoalArea() && !episodeResultReported)
             {
                 AddReward(50f);
@@ -296,37 +296,37 @@ namespace ParkourRL
         }
 
         /// <summary>
-        /// Detecta plataformas SM64StaticTerrain APENAS do mesmo environment e ordena por distancia do spawn
+        /// Detects SM64StaticTerrain platforms ONLY from the same environment and sorts by distance from spawn
         /// </summary>
         private void DetectPlatforms()
         {
             if (!autoDetectPlatforms)
                 return;
 
-            // Calcular offset do environment (para ambientes paralelos)
+            // Calculate environment offset (for parallel environments)
             Vector3 envOffset = environment != null ? environment.transform.position : Vector3.zero;
-            Vector3 spawnPosLocal = startPosition - envOffset; // Posição relativa ao environment
+            Vector3 spawnPosLocal = startPosition - envOffset; // Position relativa ao environment
 
-            // Encontrar todos os objetos com SM64StaticTerrain
+            // Find all objects with SM64StaticTerrain
             LibSM64.SM64StaticTerrain[] terrains = FindObjectsOfType<LibSM64.SM64StaticTerrain>();
             List<Collider> platformColliders = new List<Collider>();
             List<Vector3> centers = new List<Vector3>();
 
             foreach (var terrain in terrains)
             {
-                // Pular o chao de morte (DeathFloor) e chao muito abaixo
+                // Skip the death floor (DeathFloor) and floors too far below
                 if (terrain.gameObject.name.ToLower().Contains("death") || 
                     terrain.transform.position.y < -15f)
                     continue;
 
-                // FILTRAR: Apenas plataformas do mesmo environment (proximas ao spawn)
+                // FILTER: Only platforms from the same environment (near spawn)
                 Vector3 terrainPosLocal = terrain.transform.position - envOffset;
                 float horizontalDistToSpawn = Vector3.Distance(
                     new Vector3(terrainPosLocal.x, 0, terrainPosLocal.z),
                     new Vector3(spawnPosLocal.x, 0, spawnPosLocal.z)
                 );
                 
-                // Ignorar plataformas de outros environments (muito distantes > 50m)
+                // Ignore platforms from other environments (too far > 50m)
                 if (horizontalDistToSpawn > 50f)
                     continue;
 
@@ -338,7 +338,7 @@ namespace ParkourRL
                 }
             }
 
-            // Ordenar por distancia do spawn (do mais proximo ao mais distante)
+            // Sort by distance from spawn (nearest to farthest)
             var sortedIndices = Enumerable.Range(0, platformColliders.Count)
                 .OrderBy(i => Vector3.Distance(startPosition, centers[i]))
                 .ToList();
@@ -348,7 +348,7 @@ namespace ParkourRL
 
             if (detectedPlatforms.Length > 0)
             {
-                Debug.Log($"[Mario] {detectedPlatforms.Length} plataformas detectadas no environment (offset: {envOffset})");
+                Debug.Log($"[Mario] {detectedPlatforms.Length} platforms detected in environment (offset: {envOffset})");
                 for (int i = 0; i < detectedPlatforms.Length; i++)
                 {
                     Debug.Log($"  Plataforma {i}: {detectedPlatforms[i].name} em {platformCenters[i]}");
@@ -356,12 +356,12 @@ namespace ParkourRL
             }
             else
             {
-                Debug.LogWarning($"[Mario] Nenhuma plataforma detectada no environment (offset: {envOffset})!");
+                Debug.LogWarning($"[Mario] No platforms detected in environment (offset: {envOffset})!");
             }
         }
 
         /// <summary>
-        /// Verifica se Mario está na área da proxima plataforma (usa bounds da plataforma + tolerancia)
+        /// Checks if Mario is in the area of the next platform (uses platform bounds + tolerance)
         /// </summary>
         private void CheckPlatforms()
         {
@@ -374,37 +374,37 @@ namespace ParkourRL
             if (targetPlatform == null)
                 return;
 
-            // Calcular raio de alcance baseado no tamanho da plataforma
+            // Calculate reach radius based on platform size
             Bounds bounds = targetPlatform.bounds;
             float platformRadius = Mathf.Max(bounds.extents.x, bounds.extents.z) * 0.8f;
             float reachRadius = Mathf.Max(platformReachRadius, platformRadius);
 
-            // Distancia horizontal até o centro da plataforma
+            // Horizontal distance to platform center
             float horizontalDist = Vector3.Distance(
                 new Vector3(transform.position.x, 0, transform.position.z),
                 new Vector3(platformCenters[currentPlatformIndex].x, 0, platformCenters[currentPlatformIndex].z)
             );
 
-            // Verificar se está acima da plataforma (altura)
+            // Check if above the platform (height)
             bool isAbovePlatform = transform.position.y >= (bounds.min.y - 0.5f) && 
                                    transform.position.y <= (bounds.max.y + 5f);
 
-            // Check se está dentro da área da plataforma
+            // Check if within the platform area
             if (horizontalDist < reachRadius && isAbovePlatform && !platformsReached[currentPlatformIndex])
             {
                 platformsReached[currentPlatformIndex] = true;
                 AddReward(platformReward);
-                Debug.Log($"[Mario] Plataforma {currentPlatformIndex} ({targetPlatform.name}) alcançada! " +
+                Debug.Log($"[Mario] Plataforma {currentPlatformIndex} ({targetPlatform.name}) reached! " +
                           $"+{platformReward} reward | Dist: {horizontalDist:F1}m, Raio: {reachRadius:F1}m");
                 currentPlatformIndex++;
                 
-                // Resetar distancias do checkpoint para a proxima plataforma
+                // Reset checkpoint distances for the next platform
                 InitializeCheckpointDistances();
             }
         }
 
         /// <summary>
-        /// Inicializa as distancias do checkpoint (proxima plataforma)
+        /// Initializes checkpoint distances (next platform)
         /// </summary>
         private void InitializeCheckpointDistances()
         {
@@ -420,7 +420,7 @@ namespace ParkourRL
         }
 
         /// <summary>
-        /// Calcula distancia ate a proxima plataforma (checkpoint atual)
+        /// Calculates distance to the next platform (current checkpoint)
         /// </summary>
         private float GetDistanceToNextPlatform()
         {
@@ -429,7 +429,7 @@ namespace ParkourRL
             if (platformCenters == null || currentPlatformIndex >= platformCenters.Length)
                 return float.MaxValue;
 
-            // Distancia horizontal (ignorando altura) ate a proxima plataforma
+            // Horizontal distance (ignoring height) to the next platform
             return Vector3.Distance(
                 new Vector3(transform.position.x, 0, transform.position.z),
                 new Vector3(platformCenters[currentPlatformIndex].x, 0, platformCenters[currentPlatformIndex].z)
@@ -437,7 +437,7 @@ namespace ParkourRL
         }
 
         /// <summary>
-        /// Atualiza recompensas baseadas na proximidade ao checkpoint (proxima plataforma)
+        /// Updates rewards based on proximity to checkpoint (next platform)
         /// Isso evita que o Mario pule no void tentando ir direto ao goal
         /// </summary>
         private void UpdateCheckpointReward()
@@ -449,27 +449,27 @@ namespace ParkourRL
 
             float currentDistToNext = GetDistanceToNextPlatform();
             
-            // Recompensa por progredir em direcao a proxima plataforma (checkpoint)
+            // Reward for progressing toward the next platform (checkpoint)
             float checkpointDelta = previousDistanceToNextPlatform - currentDistToNext;
             if (checkpointDelta > 0.01f)
             {
-                // Recompensa proporcional ao progresso em direcao a plataforma
-                // Multiplicador maior que o goal para priorizar as plataformas
+                // Reward proportional to progress toward the platform
+                // Multiplier larger than goal to prioritize platforms
                 AddReward(checkpointDelta * 2.0f);
             }
             
-            // Marco de progresso ao checkpoint (a cada 2m mais perto)
+            // Checkpoint progress milestone (every 2m closer)
             if (currentDistToNext < bestDistanceToNextPlatform - 2.0f)
             {
-                AddReward(3.0f); // Bonus maior que o do goal (que eh 2.0f)
+                AddReward(3.0f); // Bonus larger than goal's (which is 2.0f)
                 bestDistanceToNextPlatform = currentDistToNext;
                 Debug.Log($"[Mario] Checkpoint: {currentDistToNext:F1}m ate plataforma {currentPlatformIndex} | +3 reward");
             }
             
-            // Penalidade se se afastar muito do checkpoint (evitar "exploracao" no void)
+            // Penalty for moving too far from checkpoint (prevent "exploration" in the void)
             if (currentDistToNext > bestDistanceToNextPlatform + 5.0f && bestDistanceToNextPlatform < initialDistanceToNextPlatform - 2.0f)
             {
-                // Mario ja estava progredindo mas voltou/afastou muito
+                // Mario was already progressing but went back/moved too far away
                 AddReward(-0.5f);
             }
             
@@ -477,27 +477,27 @@ namespace ParkourRL
         }
 
         /// <summary>
-        /// Verifica se Mario está na área do goal (não coordenada exata)
+        /// Checks if Mario is in the goal area (not exact coordinates)
         /// </summary>
         private bool IsInGoalArea()
         {
             if (targetGoal == null)
                 return false;
 
-            // Tentar pegar o Collider do goal para usar bounds
+            // Try to get the goal's Collider to use bounds
             Collider goalCollider = targetGoal.GetComponent<Collider>();
             if (goalCollider != null && goalCollider.isTrigger)
             {
-                // Se tiver trigger, verifica se está dentro do bounds
+                // If it has a trigger, check if within bounds
                 return goalCollider.bounds.Contains(transform.position);
             }
 
-            // Fallback: usar distancia com raio maior (area aproximada)
+            // Fallback: use distance with larger radius (approximate area)
             float dist = Vector3.Distance(
                 new Vector3(transform.position.x, 0, transform.position.z),
                 new Vector3(targetGoal.position.x, 0, targetGoal.position.z)
             );
-            return dist < 5f; // Raio de 5 metros para o goal
+            return dist < 5f; // 5 meter radius for the goal
         }
 
         public override void Heuristic(in ActionBuffers actionsOut)
@@ -520,7 +520,7 @@ namespace ParkourRL
         
         void FixedUpdate()
         {
-            // Deteccao de Mario preso
+            // Stuck Mario detection
             if (StepCount > 0 && StepCount % 300 == 0)
             {
                 float moved = Vector3.Distance(transform.position, startPosition);
@@ -534,7 +534,7 @@ namespace ParkourRL
         private float GetDistanceToGoal()
         {
             if (targetGoal == null) return float.MaxValue;
-            // Distancia horizontal (XZ) para nao penalizar saltos verticais
+            // Horizontal distance (XZ) to avoid penalizing vertical jumps
             Vector3 a = transform.position;
             Vector3 b = targetGoal.position;
             return Vector3.Distance(new Vector3(a.x, 0, a.z), new Vector3(b.x, 0, b.z));
@@ -552,7 +552,7 @@ namespace ParkourRL
 
         void OnTriggerStay(Collider other)
         {
-            // Backup: se o agente ficar dentro do goal mas OnTriggerEnter nao disparar
+            // Backup: if the agent stays inside the goal but OnTriggerEnter doesn't fire
             if (other.CompareTag("Goal") && !episodeResultReported)
             {
                 AddReward(50f);

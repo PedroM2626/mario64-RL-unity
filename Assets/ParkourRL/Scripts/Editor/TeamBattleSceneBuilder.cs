@@ -19,7 +19,7 @@ namespace ParkourRL
         [ContextMenu("Build Team Battle Scene")]
         public void BuildTeamBattleScene()
         {
-            Debug.Log("[TeamBattleBuilder] Iniciando construção da cena Team Battle...");
+            Debug.Log("[TeamBattleBuilder] Starting Team Battle scene construction...");
 
             // Limpar cena existente (exceto este script)
             ClearScene();
@@ -39,7 +39,7 @@ namespace ParkourRL
             // Criar lighting
             CreateLighting();
 
-            Debug.Log("[TeamBattleBuilder] Cena Team Battle construída com sucesso!");
+            Debug.Log("[TeamBattleBuilder] Team Battle scene built successfully!");
             EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
         }
 
@@ -80,7 +80,7 @@ namespace ParkourRL
             platformMat.color = new Color(0.7f, 0.6f, 0.5f);
             meshRenderer.material = platformMat;
 
-            // Adicionar componentes necessários
+            // Add required components
             BoxCollider bc = arenaPlatform.AddComponent<BoxCollider>();
             bc.size = Vector3.one;
 
@@ -124,7 +124,7 @@ namespace ParkourRL
             GameObject manager = new GameObject("TeamBattleManager");
             TeamBattleEnvironment env = manager.AddComponent<TeamBattleEnvironment>();
 
-            // Configurar referências
+            // Configure references
             Transform[] teamASpawns = new Transform[5];
             Transform[] teamBSpawns = new Transform[5];
 

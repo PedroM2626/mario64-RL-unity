@@ -1,8 +1,8 @@
 """
-Offline RL (CQL/IQL) para Mario Parkour
-Treina agente apenas de dados gravados, sem interação com ambiente.
+Offline RL (CQL/IQL) for Mario Parkour
+Trains agent exclusively from recorded data, without environment interaction.
 
-Uso:
+Usage:
     python train_offline_rl.py --data ../HybridTrainingData/ --algo CQL --output models/cql_model.pth
 """
 
@@ -20,19 +20,19 @@ from torch.utils.data import Dataset, DataLoader
 from collections import deque
 import random
 
-# Configuração
+# Configuration
 OBSERVATION_DIM = 30
 ACTION_DIM = 3
 GAMMA = 0.99
 TAU = 0.005
 
 class OfflineDataset(Dataset):
-    """Dataset para Offline RL."""
+    """Dataset for Offline RL."""
     
     def __init__(self, data_dir, min_episode_length=10):
         self.transitions = []
         self.load_data(data_dir, min_episode_length)
-        print(f"Dataset carregado: {len(self.transitions)} transições")
+        print(f"Dataset loaded: {len(self.transitions)} transitions")
         
     def load_data(self, data_dir, min_length):
         json_files = glob.glob(os.path.join(data_dir, "*.json"))
@@ -69,7 +69,7 @@ class OfflineDataset(Dataset):
                             })
                             
             except Exception as e:
-                print(f"Erro ao carregar {json_file}: {e}")
+                print(f"Error loading {json_file}: {e}")
     
     def __len__(self):
         return len(self.transitions)
@@ -86,7 +86,7 @@ class OfflineDataset(Dataset):
 
 
 class QNetwork(nn.Module):
-    """Q-Network para CQL/IQL."""
+    """Q-Network for CQL/IQL."""
     
     def __init__(self, obs_dim=OBSERVATION_DIM, action_dim=ACTION_DIM, 
                  hidden_size=256, num_layers=2):
@@ -110,7 +110,7 @@ class QNetwork(nn.Module):
 
 
 class PolicyNetwork(nn.Module):
-    """Política para IQL/actor."""
+    """Policy for IQL/actor."""
     
     def __init__(self, obs_dim=OBSERVATION_DIM, action_dim=ACTION_DIM,
                  hidden_size=256, num_layers=2):
@@ -157,7 +157,7 @@ class CQLAgent:
         self.args = args
         self.device = device
         
-        # Q-networks (duplas)
+        # Dual Q-networks
         self.q1 = QNetwork(args.hidden_size, args.num_layers).to(device)
         self.q2 = QNetwork(args.hidden_size, args.num_layers).to(device)
         self.q1_target = QNetwork(args.hidden_size, args.num_layers).to(device)
@@ -171,7 +171,7 @@ class CQLAgent:
             lr=args.lr
         )
         
-        # Política
+        # Policy
         self.policy = PolicyNetwork(args.hidden_size, args.num_layers).to(device)
         self.policy_optimizer = optim.Adam(self.policy.parameters(), lr=args.lr)
         
@@ -182,11 +182,11 @@ class CQLAgent:
         next_obs = batch['next_obs'].to(self.device)
         done = batch['done'].to(self.device)
         
-        # Q-values atuais
+        # Current Q-values
         q1_value = self.q1(obs, actions)
         q2_value = self.q2(obs, actions)
         
-        # Q-values alvo
+        # Target Q-values
         with torch.no_grad():
             next_actions, _ = self.policy.sample(next_obs)
             q1_next = self.q1_target(next_obs, next_actions)
@@ -194,12 +194,12 @@ class CQLAgent:
             q_next = torch.min(q1_next, q2_next)
             q_target = reward + (1 - done) * GAMMA * q_next
         
-        # Loss Q padrão
+        # Standard Q loss
         q1_loss = F.mse_loss(q1_value, q_target)
         q2_loss = F.mse_loss(q2_value, q_target)
         
-        # CQL Loss (conservador)
-        # Amostrar ações aleatórias
+        # CQL Loss (conservative)
+        # Sample random actions
         random_actions = torch.FloatTensor(
             q1_value.shape[0], ACTION_DIM
         ).uniform_(-1, 1).to(self.device)
@@ -211,15 +211,15 @@ class CQLAgent:
         cql1_loss = torch.logsumexp(q1_random, dim=0).mean() - q1_value.mean()
         cql2_loss = torch.logsumexp(q2_random, dim=0).mean() - q2_value.mean()
         
-        # Loss total Q
+        # Total Q loss
         q_loss = q1_loss + q2_loss + self.args.cql_alpha * (cql1_loss + cql2_loss)
         
-        # Atualizar Q
+        # Update Q
         self.q_optimizer.zero_grad()
         q_loss.backward()
         self.q_optimizer.step()
         
-        # Atualizar política
+        # Update policy
         new_actions, log_prob = self.policy.sample(obs)
         q1_new = self.q1(obs, new_actions)
         q2_new = self.q2(obs, new_actions)
@@ -274,7 +274,7 @@ class IQLAgent:
             lr=args.lr
         )
         
-        # Política
+        # Policy
         self.policy = PolicyNetwork(args.hidden_size, args.num_layers).to(device)
         self.policy_optimizer = optim.Adam(self.policy.parameters(), lr=args.lr)
         
@@ -295,7 +295,7 @@ class IQLAgent:
         next_obs = batch['next_obs'].to(self.device)
         done = batch['done'].to(self.device)
         
-        # Atualizar V
+        # Update V
         with torch.no_grad():
             q1_value = self.q1(obs, actions)
             q2_value = self.q2(obs, actions)
@@ -308,7 +308,7 @@ class IQLAgent:
         v_loss.backward()
         self.v_optimizer.step()
         
-        # Atualizar Q
+        # Update Q
         with torch.no_grad():
             v_next = self.v(next_obs)
             q_target = reward + (1 - done) * GAMMA * v_next
@@ -321,7 +321,7 @@ class IQLAgent:
         q_loss.backward()
         self.q_optimizer.step()
         
-        # Atualizar política (AWR)
+        # Update policy (AWR)
         with torch.no_grad():
             adv = q_value - v_value
             exp_adv = torch.exp(adv / self.args.temperature)
@@ -356,7 +356,7 @@ class IQLAgent:
 
 
 def train_offline_rl(args):
-    """Treina Offline RL."""
+    """Trains Offline RL."""
     
     print("=" * 60)
     print(f"Offline RL - {args.algo} - Mario Parkour")
@@ -369,17 +369,17 @@ def train_offline_rl(args):
     # Device
     device = torch.device('cuda' if torch.cuda.is_available() and args.cuda else 'cpu')
     print(f"Device: {device}")
-    print(f"Transições: {len(dataset)}")
+    print(f"Transitions: {len(dataset)}")
     
-    # Agente
+    # Agent
     if args.algo == 'CQL':
         agent = CQLAgent(args, device)
     elif args.algo == 'IQL':
         agent = IQLAgent(args, device)
     else:
-        raise ValueError(f"Algoritmo desconhecido: {args.algo}")
+        raise ValueError(f"Unknown algorithm: {args.algo}")
     
-    # Treinamento
+    # Training
     losses_history = []
     
     for epoch in range(args.epochs):
@@ -389,7 +389,7 @@ def train_offline_rl(args):
             metrics = agent.train_step(batch)
             epoch_losses.append(metrics)
         
-        # Médias
+        # Averages
         avg_metrics = {}
         for key in epoch_losses[0].keys():
             avg_metrics[key] = np.mean([m[key] for m in epoch_losses])
@@ -400,18 +400,18 @@ def train_offline_rl(args):
             print(f"Epoch {epoch+1}/{args.epochs} - " + 
                   " ".join([f"{k}: {v:.4f}" for k, v in avg_metrics.items()]))
         
-        # Salvar checkpoint
+        # Save checkpoint
         if (epoch + 1) % 50 == 0:
             checkpoint_path = args.output.replace('.pth', f'_epoch{epoch+1}.pth')
             agent.save(checkpoint_path)
     
-    # Salvar modelo final
+    # Save final model
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
     agent.save(args.output)
     
     print("\n" + "=" * 60)
-    print(f"Treinamento completo!")
-    print(f"Modelo salvo em: {args.output}")
+    print(f"Training complete!")
+    print(f"Model saved at: {args.output}")
     print(f"Epochs: {args.epochs}")
     print(f"Final metrics: {losses_history[-1]}")
 
@@ -419,36 +419,36 @@ def train_offline_rl(args):
 def main():
     parser = argparse.ArgumentParser(description='Train Offline RL for Mario')
     parser.add_argument('--data', type=str, required=True,
-                        help='Diretório com dados JSON')
+                        help='Directory with JSON data')
     parser.add_argument('--algo', type=str, default='CQL', choices=['CQL', 'IQL'],
-                        help='Algoritmo: CQL ou IQL')
+                        help='Algorithm: CQL or IQL')
     parser.add_argument('--output', type=str, default='models/offline_rl_model.pth',
-                        help='Caminho para salvar modelo')
+                        help='Path to save model')
     parser.add_argument('--epochs', type=int, default=200,
-                        help='Número de epochs')
+                        help='Number of epochs')
     parser.add_argument('--batch-size', type=int, default=256,
                         help='Batch size')
     parser.add_argument('--lr', type=float, default=3e-4,
                         help='Learning rate')
     parser.add_argument('--hidden-size', type=int, default=256,
-                        help='Tamanho da camada oculta')
+                        help='Hidden layer size')
     parser.add_argument('--num-layers', type=int, default=2,
-                        help='Número de camadas')
+                        help='Number of layers')
     parser.add_argument('--min-episode-length', type=int, default=10,
-                        help='Comprimento mínimo do episódio')
+                        help='Minimum episode length')
     
     # CQL specific
     parser.add_argument('--cql-alpha', type=float, default=1.0,
-                        help='Peso do CQL loss')
+                        help='CQL loss weight')
     parser.add_argument('--alpha', type=float, default=0.1,
-                        help='Temperatura da política')
+                        help='Policy temperature')
     
     # IQL specific
     parser.add_argument('--temperature', type=float, default=3.0,
-                        help='Temperatura do AWR')
+                        help='AWR temperature')
     
     parser.add_argument('--cuda', action='store_true',
-                        help='Usar CUDA se disponível')
+                        help='Use CUDA if available')
     
     args = parser.parse_args()
     

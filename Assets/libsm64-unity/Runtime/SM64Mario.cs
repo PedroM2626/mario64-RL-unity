@@ -44,13 +44,13 @@ namespace LibSM64
             inputProvider = GetComponent<SM64InputProvider>();
             if( inputProvider == null )
             {
-                Debug.LogError("[SM64Mario] InputProvider não encontrado!");
+                Debug.LogError("[SM64Mario] InputProvider not found!");
                 enabled = false;
                 return;
             }
             if (inputProvider.GetType().Name != "MarioInputProvider")
             {
-                Debug.LogWarning($"[SM64Mario] InputProvider é {inputProvider.GetType().Name}, esperado: MarioInputProvider");
+                Debug.LogWarning($"[SM64Mario] InputProvider is {inputProvider.GetType().Name}, expected: MarioInputProvider");
             }
 
             marioRendererObject = new GameObject("MARIO");
@@ -108,10 +108,10 @@ namespace LibSM64
 
         public void Teleport(Vector3 newPos)
         {
-            // Atualiza a posição inicial instantaneamente visualmente
+            // Updates the initial position instantly visually
             transform.position = newPos;
 
-            // Durante criação/desativação, ainda não há estado nativo válido para teleporte completo.
+            // During creation/deactivation, there is no valid native state for full teleportation yet.
             if (!isActiveAndEnabled || !Interop.isGlobalInit)
                 return;
 
@@ -123,16 +123,16 @@ namespace LibSM64
                 };
             }
 
-            // Apaga a instância nativa velha (se existir)
+            // Deletes the old native instance (if it exists)
             if (marioId != 0)
             {
                 Interop.MarioDelete(marioId);
             }
 
-            // Recria a instância nativa na nova posição
+            // Recreates the native instance at the new position
             marioId = Interop.MarioCreate( new Vector3( -newPos.x, newPos.y, newPos.z ) * Interop.SCALE_FACTOR );
 
-            // Limpa os estados de transição
+            // Clears transition states
             states[0] = new Interop.SM64MarioState();
             states[1] = new Interop.SM64MarioState();
             buffIndex = 0;
@@ -140,7 +140,7 @@ namespace LibSM64
 
         public void contextFixedUpdate()
         {
-            // Proteção contra null durante ciclo de vida
+            // Null protection during lifecycle
             if (inputProvider == null || states == null || positionBuffers == null)
                 return;
                 
@@ -148,7 +148,7 @@ namespace LibSM64
             var look = inputProvider.GetCameraLookDirection();
             var joystick = inputProvider.GetJoystickAxes();
             
-            // Debug: logar apenas quando há input significativo (evita flood)
+            // Debug: only log when there is significant input (avoids flood)
             if (joystick.magnitude > 0.1f && Time.frameCount % 60 == 0)
             {
                 Debug.Log($"[SM64Mario] Input ativo - Joystick: {joystick}");
@@ -179,7 +179,7 @@ namespace LibSM64
 
         public void contextUpdate()
         {
-            // Proteção contra null durante ciclo de vida
+            // Null protection during lifecycle
             if (lerpPositionBuffer == null || states == null)
                 return;
                 
@@ -197,12 +197,12 @@ namespace LibSM64
             marioMesh.vertices = lerpPositionBuffer;
             marioMesh.normals = lerpNormalBuffer;
             
-            // As atualizações de Colors e UVs ficam no Update visual para não estourar o TLS Allocator no Unity ML-Agents (TimeScale alto)
+            // Colors and UVs updates stay in the visual Update to avoid TLS Allocator overflow in Unity ML-Agents (high TimeScale)
             marioMesh.colors = colorBufferColors;
             marioMesh.uv = uvBuffer;
 
             marioMesh.RecalculateBounds();
-            // marioMesh.RecalculateTangents(); // Desabilitado para evitar vazamentos ALLOC_TEMP_MAIN (Desnecessário sem Normal Map)
+            // marioMesh.RecalculateTangents(); // Disabled to avoid ALLOC_TEMP_MAIN leaks (Unnecessary without Normal Map)
         }
 
         void OnDrawGizmos()

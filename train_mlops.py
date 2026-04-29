@@ -22,21 +22,21 @@ def main():
     with mlflow.start_run(run_name=args.run_id) as run:
         print(f"[*] Started MLflow run: {run.info.run_id}")
         
-        # MLOps: Registrando artefatos e hiperparametros
+        # MLOps: Register artifacts and hyperparameters
         mlflow.log_artifact(args.config)
         mlflow.log_param("config_file", args.config)
         mlflow.log_param("model_type", "Multi-Agent PPO+SAC+DQN(PPO-variant)")
         
         with open(args.config, 'r') as f:
             config_data = yaml.safe_load(f)
-            # Log de algumas configuracoes basicas
+            # Log some basic configurations
             try:
                 for behavior, data in config_data.get("behaviors", {}).items():
                     mlflow.log_param(f"{behavior}_trainer", data.get("trainer_type"))
             except Exception as e:
                 print(f"Warning: could not parse behaviors for MLflow logging: {e}")
         
-        # Preparar comando do mlagents
+        # Prepare mlagents command
         cmd = [
             "mlagents-learn",
             args.config,
@@ -48,7 +48,7 @@ def main():
             
         print(f"[*] Running command: {' '.join(cmd)}")
         
-        # Iniciar treinamento
+        # Start training
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         
         for line in process.stdout:
@@ -56,12 +56,12 @@ def main():
             
         process.wait()
         
-        # MLOps: Finalizar experimento e registrar metricas/modelos
+        # MLOps: Finalize experiment and register metrics/models
         if process.returncode == 0:
             print("[*] Training completed successfully.")
             mlflow.log_param("status", "completed")
             
-            # Registrar todos os modelos .onnx gerados
+            # Register all generated .onnx models
             results_dir = os.path.join("results", args.run_id)
             if os.path.exists(results_dir):
                 for root, dirs, files in os.walk(results_dir):

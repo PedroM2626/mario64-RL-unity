@@ -1,90 +1,90 @@
-# Setup da Cena HybridTraining
+# HybridTraining Scene Setup
 
-## Visão Geral
+## Overview
 
-A cena **HybridTraining** permite treinar um agente ML-Agents (AI Mario - azul) lado a lado com um Mario controlado pelo player (verde). O sistema suporta dois modos:
+The **HybridTraining** scene allows training an ML-Agents agent (AI Mario - blue) side by side with a player-controlled Mario (green). The system supports two modes:
 
-- **Training Mode**: Treino RL normal com ML-Agents
-- **Recording Mode**: Grava dados do player para Imitation Learning e Offline RL
+- **Training Mode**: Standard RL training with ML-Agents
+- **Recording Mode**: Records player data for Imitation Learning and Offline RL
 
-## Método Automático (Recomendado)
+## Automatic Method (Recommended)
 
-### Usando o Hybrid Scene Builder
+### Using the Hybrid Scene Builder
 
-1. No Unity Editor, vá no menu: **`ParkourRL > Build Hybrid Training Scene`**
-2. Aguarde a cena ser criada automaticamente
-3. Quando aparecer a mensagem "Setup Complete", pressione **Play** para testar!
+1. In the Unity Editor, go to: **`ParkourRL > Build Hybrid Training Scene`**
+2. Wait for the scene to be created automatically
+3. When the "Setup Complete" message appears, press **Play** to test!
 
-### Configurar Referências (se necessário)
+### Configure References (if needed)
 
-Se alguma referência não foi atribuída automaticamente:
+If any reference was not assigned automatically:
 
-1. No menu: **`ParkourRL > Setup Hybrid Scene References`**
-2. Verifique no Inspector do GameObject "HybridEnvironment":
-   - `Goal` deve apontar para "GoalPlatform"
-   - `Player Spawn Point` deve apontar para "PlayerSpawn"
-   - `AI Spawn Point` deve apontar para "AISpawn"
-   - `Data Recorder` e `Training Manager` devem estar conectados
+1. In the menu: **`ParkourRL > Setup Hybrid Scene References`**
+2. Check the Inspector on the "HybridEnvironment" GameObject:
+   - `Goal` should point to "GoalPlatform"
+   - `Player Spawn Point` should point to "PlayerSpawn"
+   - `AI Spawn Point` should point to "AISpawn"
+   - `Data Recorder` and `Training Manager` should be connected
 
-## Método Manual (Alternativo)
+## Manual Method (Alternative)
 
-Se preferir criar a cena manualmente, siga os passos abaixo:
+If you prefer to create the scene manually, follow these steps:
 
-### 1. Criar Nova Cena
+### 1. Create New Scene
 
-1. No Unity, vá em `File > New Scene`
-2. Salve como: `Assets/ParkourRL/Scenes/HybridTraining.unity`
+1. In Unity: `File > New Scene`
+2. Save as: `Assets/ParkourRL/Scenes/HybridTraining.unity`
 
-### 2. Estrutura de GameObjects
+### 2. GameObject Hierarchy
 
-Crie a seguinte hierarquia:
+Create the following hierarchy:
 
 ```
 HybridTraining (Scene)
-├── HybridEnvironment (Empty GameObject)
-│   ├── HybridParkourEnvironment.cs
-│   ├── HybridDataRecorder.cs
-│   ├── HybridTrainingManager.cs
-│   └── Spawn Points:
-│       ├── PlayerSpawn (Transform - posição x: -7, y: 2, z: 0)
-│       └── AISpawn (Transform - posição x: 7, y: 2, z: 0)
-│
-├── Parkour Level (copiar do ParkourTraining.unity)
-│   ├── StartPlatform (SM64StaticTerrain)
-│   ├── Platform_1 (SM64StaticTerrain)
-│   ├── Platform_2 (SM64StaticTerrain)
-│   ├── Platform_3 (SM64StaticTerrain)
-│   └── GoalPlatform (com trigger collider + tag "Goal")
-│
-├── UI Canvas
-│   ├── ModeText (Text UI - canto superior)
-│   ├── InfoText (Text UI - centro superior)
-│   ├── TrainingButton (Button)
-│   ├── RecordingButton (Button)
-│   └── StatsPanel (painel com estatísticas)
-│
-└── Cameras
-    ├── PlayerCamera (Camera - viewport rect: 0,0,0.5,1)
-    └── AICamera (Camera - viewport rect: 0.5,0,0.5,1)
++-- HybridEnvironment (Empty GameObject)
+|   +-- HybridParkourEnvironment.cs
+|   +-- HybridDataRecorder.cs
+|   +-- HybridTrainingManager.cs
+|   +-- Spawn Points:
+|       +-- PlayerSpawn (Transform - position x: -7, y: 2, z: 0)
+|       +-- AISpawn (Transform - position x: 7, y: 2, z: 0)
+|
++-- Parkour Level (copy from ParkourTraining.unity)
+|   +-- StartPlatform (SM64StaticTerrain)
+|   +-- Platform_1 (SM64StaticTerrain)
+|   +-- Platform_2 (SM64StaticTerrain)
+|   +-- Platform_3 (SM64StaticTerrain)
+|   +-- GoalPlatform (with trigger collider + tag "Goal")
+|
++-- UI Canvas
+|   +-- ModeText (Text UI - top corner)
+|   +-- InfoText (Text UI - top center)
+|   +-- TrainingButton (Button)
+|   +-- RecordingButton (Button)
+|   +-- StatsPanel (stats panel)
+|
++-- Cameras
+    +-- PlayerCamera (Camera - viewport rect: 0,0,0.5,1)
+    +-- AICamera (Camera - viewport rect: 0.5,0,0.5,1)
 ```
 
-### 3. Configuração dos Componentes
+### 3. Component Configuration
 
 #### HybridParkourEnvironment
 
 ```csharp
 // Inspector settings:
 Mario Prefab: Assets/Mario.prefab
-Player Material: (deixar null - será criado automaticamente)
-AI Material: (deixar null - será criado automaticamente)
-Goal: (arrastar GoalPlatform)
-Player Spawn Point: (arrastar PlayerSpawn)
-AI Spawn Point: (arrastar AISpawn)
+Player Material: (leave null - will be created automatically)
+AI Material: (leave null - will be created automatically)
+Goal: (drag GoalPlatform)
+Player Spawn Point: (drag PlayerSpawn)
+AI Spawn Point: (drag AISpawn)
 Mario Spacing: 15
 Sync Resets: true
 Show Comparison UI: true
-Data Recorder: (arrastar HybridDataRecorder da cena)
-Training Manager: (arrastar HybridTrainingManager da cena)
+Data Recorder: (drag HybridDataRecorder from scene)
+Training Manager: (drag HybridTrainingManager from scene)
 ```
 
 #### HybridDataRecorder
@@ -105,33 +105,33 @@ Max Steps Per Episode: 2000
 Initial Mode: Training
 Allow Mode Switching: true
 Mode Switch Key: M
-UI References: (arrastar elementos da UI)
-Environment: (arrastar HybridParkourEnvironment)
-Data Recorder: (arrastar HybridDataRecorder)
+UI References: (drag UI elements)
+Environment: (drag HybridParkourEnvironment)
+Data Recorder: (drag HybridDataRecorder)
 ```
 
-### 4. Configuração do Parkour
+### 4. Parkour Configuration
 
-Copie as plataformas da cena `ParkourTraining.unity`:
+Copy platforms from the `ParkourTraining.unity` scene:
 
-1. Abra `ParkourTraining.unity`
-2. Selecione todas as plataformas (SM64StaticTerrain)
-3. Copie (Ctrl+C)
-4. Abra `HybridTraining.unity`
-5. Cole (Ctrl+V)
+1. Open `ParkourTraining.unity`
+2. Select all platforms (SM64StaticTerrain)
+3. Copy (Ctrl+C)
+4. Open `HybridTraining.unity`
+5. Paste (Ctrl+V)
 
-Adicione **SM64StaticTerrain** em todas as plataformas se ainda não tiver.
+Add **SM64StaticTerrain** to all platforms if not already present.
 
-### 5. Configuração do Goal
+### 5. Goal Configuration
 
-O Goal deve ter:
-- **Transform**: Na última plataforma
-- **Collider**: BoxCollider ou SphereCollider com `isTrigger = true`
+The Goal must have:
+- **Transform**: On the last platform
+- **Collider**: BoxCollider or SphereCollider with `isTrigger = true`
 - **Tag**: "Goal"
 
-### 6. Configuração YAML
+### 6. YAML Configuration
 
-Crie `Assets/ParkourRL/Config/mario_parkour_hybrid.yaml`:
+Create `Assets/ParkourRL/Config/mario_parkour_hybrid.yaml`:
 
 ```yaml
 behaviors:
@@ -160,79 +160,59 @@ behaviors:
     threaded: true
 ```
 
-### 7. Script para Build/Play
+## How to Use
 
-Crie `train_hybrid.bat`:
+### Training Mode (Default)
 
-```batch
-@echo off
-cd /d "c:\Users\pedro\Downloads\libsm64-unity-dev-master"
-SET PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
+1. Open `HybridTraining.unity`
+2. Press **Play**
+3. Run `train_hybrid.bat` (or `.ps1`)
+4. AI Mario (blue) trains with ML-Agents
+5. Player Mario (green) can be controlled with **WASD + Space**
+6. Both compete to complete the parkour first
 
-"C:\Users\pedro\AppData\Roaming\Python\Python314\Scripts\mlagents-learn.exe" ^
-    Assets/ParkourRL/Config/mario_parkour_hybrid.yaml ^
-    --run-id=mario_hybrid_v1 ^
-    --force
+### Recording Mode
 
-pause
-```
-
-## Como Usar
-
-### Modo Training (Padrão)
-
-1. Abra a cena `HybridTraining.unity`
-2. Clique em **Play**
-3. Execute o `train_hybrid.bat`
-4. AI Mario (azul) treina com ML-Agents
-5. Player Mario (verde) pode ser controlado com **WASD + Espaço**
-6. Ambos competem para ver quem completa o parkour primeiro
-
-### Modo Recording
-
-1. Pressione **M** ou clique em "Recording Mode"
-2. Controle o Mario verde com **WASD + Espaço**
-3. Os dados são gravados automaticamente em:
+1. Press **M** or click "Recording Mode"
+2. Control green Mario with **WASD + Space**
+3. Data is recorded automatically to:
    ```
    HybridTrainingData/hybrid_episodes_YYYYMMDD_HHMMSS_batch0.json
    HybridTrainingData/hybrid_episodes_YYYYMMDD_HHMMSS_batch0.csv
    ```
-4. Complete o parkour (ou falhe) - o episódio será salvo
-5. Os dados contêm: observações, ações, recompensas, flags de término
+4. Complete the parkour (or fail) - the episode is saved
+5. Data contains: observations, actions, rewards, termination flags
 
-### Usar Dados Gravados
+### Using Recorded Data
 
-Os dados podem ser usados para:
+Data can be used for:
 
 1. **Imitation Learning (Behavior Cloning)**
-   ```python
-   # Treinar rede para prever ações dadas observações
+   ```bash
    python train_behavior_cloning.py --data HybridTrainingData/
    ```
 
 2. **Offline RL (CQL, IQL)**
-   ```python
-   # Treinar sem ambiente, apenas dos dados
+   ```bash
    python train_offline_rl.py --data HybridTrainingData/ --algo CQL
    ```
 
-3. **Warm Start para RL**
-   ```python
-   # Inicializar PPO com pesos do IL
-   python train_hybrid.py --warm-start model_bc.pth
+3. **Warm Start for RL**
+   ```bash
+   mlagents-learn config.yaml --initialize-from=models/bc_model.onnx
    ```
 
-## Controles
+## Controls
 
-| Tecla | Ação |
-|-------|------|
-| **WASD** / **Setas** | Mover Mario Player |
-| **Espaço** | Pular |
-| **M** | Alternar modo (Training/Recording) |
-| **P** | Pausar/Resumar |
-| **R** | Resetar ambos os Marios |
+| Key | Action |
+|-----|--------|
+| **WASD** / **Arrows** | Move Player Mario |
+| **Space** | Jump |
+| **M** | Toggle mode (Training/Recording) |
+| **P** | Pause/Resume |
+| **R** | Reset both Marios |
 
-## Arquitetura dos Dados
+## Data Architecture
 
 ### JSON Format
 
@@ -255,8 +235,8 @@ Os dados podem ser usados para:
       "transitions": [
         {
           "step": 0,
-          "observations": [0.1, 0.2, ...],  // 30 floats
-          "actions": [0.5, 0.3, 0.0],       // [joystick_x, joystick_y, jump]
+          "observations": [0.1, 0.2, ...],
+          "actions": [0.5, 0.3, 0.0],
           "reward": -0.01,
           "done": false
         }
@@ -276,35 +256,35 @@ episode_id,step,timestamp,obs_0,...,obs_29,action_0,action_1,action_2,reward,don
 
 ## Troubleshooting
 
-### Problema: AI Mario não se move
+### Problem: AI Mario does not move
 
-**Solução**: Verifique se:
-1. ML-Agents está rodando (`train_hybrid.bat`)
-2. Behavior Name no YAML corresponde ao do agente (`MarioHybrid`)
-3. O modo está em "Training", não "Recording"
+**Solution**: Check that:
+1. ML-Agents is running (`train_hybrid.bat`)
+2. Behavior Name in YAML matches the agent (`MarioHybrid`)
+3. Mode is "Training", not "Recording"
 
-### Problema: Dados não estão sendo salvos
+### Problem: Data is not being saved
 
-**Solução**: Verifique se:
-1. Diretório `HybridTrainingData/` existe (criar manualmente se necessário)
-2. Modo está em "Recording"
-3. Episódio termina (success ou failure)
-4. Verifique console por erros de permissão de arquivo
+**Solution**: Check that:
+1. Directory `HybridTrainingData/` exists (create manually if needed)
+2. Mode is "Recording"
+3. Episode terminates (success or failure)
+4. Check console for file permission errors
 
-### Problema: Câmera dividida não funciona
+### Problem: Split camera does not work
 
-**Solução**: 
-1. Verifique se as câmeras têm Viewport Rect diferentes
+**Solution**:
+1. Check that cameras have different Viewport Rects
 2. PlayerCamera: Rect(0, 0, 0.5, 1)
 3. AICamera: Rect(0.5, 0, 0.5, 1)
 
-## Próximos Passos
+## Next Steps
 
-1. Gravar 50+ episódios de demonstração humana
-2. Treinar Behavior Cloning com os dados
-3. Usar modelo BC como warm-start para PPO
-4. Aplicar DAgger para melhorar com novos dados
+1. Record 50+ human demonstration episodes
+2. Train Behavior Cloning with the data
+3. Use BC model as warm-start for PPO
+4. Apply DAgger to improve with new data
 
 ---
 
-**Nota**: Este sistema é uma implementação completa de arquitetura híbrida IL+RL. Os dados gerados são compatíveis com algoritmos padrão de Offline RL (CQL, IQL, BCQ).
+**Note**: This system is a complete implementation of a hybrid IL+RL architecture. Generated data is compatible with standard Offline RL algorithms (CQL, IQL, BCQ).

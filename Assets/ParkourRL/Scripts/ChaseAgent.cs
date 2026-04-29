@@ -71,7 +71,7 @@ namespace ParkourRL
             Vector3 envOffset = chaseEnvironment != null ? chaseEnvironment.transform.position : Vector3.zero;
             Vector3 localPos = position - envOffset;
 
-            // [3] Posição local
+            // [3] Position local
             sensor.AddObservation(localPos.x / 50f);
             sensor.AddObservation(localPos.y / 10f);
             sensor.AddObservation(localPos.z / 50f);
@@ -108,7 +108,7 @@ namespace ParkourRL
                     sensor.AddObservation(0f);
             }
 
-            // [1] Tempo normalizado
+            // [1] Normalized time
             sensor.AddObservation(Mathf.Clamp01(episodeTime / maxEpisodeTime));
 
             // [16] Raycasts
@@ -165,7 +165,7 @@ namespace ParkourRL
 
             episodeTime += Time.fixedDeltaTime;
 
-            // Recompensas densas por distância (descentralizado)
+            // Dense distance-based rewards (decentralized)
             float dist = GetOpponentDistance();
             float delta = previousOpponentDistance - dist;
 

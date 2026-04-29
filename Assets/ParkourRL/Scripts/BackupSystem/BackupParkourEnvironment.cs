@@ -34,7 +34,7 @@ namespace ParkourRL.BackupSystem
         [SerializeField] private int parallelEnvironments = 4;
         [SerializeField] private float environmentSpacing = 30f;
 
-        // Properties públicas para acesso da inner class RecordingInputProvider
+        // Public properties for access by inner class RecordingInputProvider
         public Transform marioSpawnPointPublic => marioSpawnPoint;
         public Transform goalPublic => goal;
 
@@ -70,7 +70,7 @@ namespace ParkourRL.BackupSystem
         {
             EnsureAllMeshColliders();
 
-            // Inicializar o sistema de gravação para modo Recording
+            // Initialize the recording system for Recording mode
             if (startupMode == StartupMode.Recording)
             {
                 dataRecorder = gameObject.AddComponent<HybridDataRecorder>();
@@ -280,11 +280,11 @@ namespace ParkourRL.BackupSystem
             playerControlledMario.SetActive(true);
             justSpawned = true;
 
-            // Iniciar gravação se dataRecorder foi criado
+            // Start recording if dataRecorder was created
             if (dataRecorder != null)
             {
                 dataRecorder.StartEpisode();
-                Debug.Log("[BackupEnv] Episódio de gravação iniciado");
+                Debug.Log("[BackupEnv] Recording episode started");
             }
 
             SetupFollowCamera();
@@ -361,8 +361,8 @@ namespace ParkourRL.BackupSystem
         }
 
         /// <summary>
-        /// Coleta o vetor de observação de 30 dimensões para Recording mode.
-        /// Mantém a mesma estrutura que BackupMarioRLAgent.CollectObservations()
+        /// Collects the 30-dimension observation vector for Recording mode.
+        /// Maintains the same structure as BackupMarioRLAgent.CollectObservations()
         /// </summary>
         public float[] CollectObservationVector()
         {
@@ -436,7 +436,7 @@ namespace ParkourRL.BackupSystem
                 obs.Add(1f);
             }
 
-            // 28: Jump pressed (0/1) - será preenchido pelo RecordingInputProvider
+            // 28: Jump pressed (0/1) - will be filled by RecordingInputProvider
             obs.Add(0f);
 
             // 29: Episode time normalized
@@ -461,7 +461,7 @@ namespace ParkourRL.BackupSystem
             private BackupParkourEnvironment environment;
             private HybridDataRecorder recorder;
 
-            // Estado de gravação
+            // Recording state
             private float[] previousObservations;
             private float[] currentObservations;
             private float cumulativeReward = 0f;
@@ -508,11 +508,11 @@ namespace ParkourRL.BackupSystem
 
             void Update()
             {
-                // Só gravar se temos ambiente e recorder
+                // Only record if we have environment and recorder
                 if (environment == null || recorder == null || gameObject == null)
                     return;
 
-                // Coletar observações atuais
+                // Collect current observations
                 currentObservations = environment.CollectObservationVector();
                 
                 if (previousObservations == null)
@@ -523,7 +523,7 @@ namespace ParkourRL.BackupSystem
                     return;
                 }
 
-                // Calcular reward baseado em progresso em direção ao objetivo
+                // Calculate reward based on progress toward the goal
                 float reward = -0.01f; // Penalty por cada passo
 
                 if (environment.goalPublic != null)
@@ -552,7 +552,7 @@ namespace ParkourRL.BackupSystem
                     return;
                 }
 
-                // Verificar tempo máximo
+                // Verificar tempo maximum
                 float elapsedTime = Time.time - episodeStartTime;
                 if (elapsedTime >= MAX_EPISODE_TIME)
                 {
@@ -582,7 +582,7 @@ namespace ParkourRL.BackupSystem
 
             private void RecordFinalStep(float reward, bool success)
             {
-                // Gravar último step
+                // Record last step
                 float[] actions = new float[3]
                 {
                     GetJoystickAxes().x,
@@ -593,14 +593,14 @@ namespace ParkourRL.BackupSystem
                 recorder.RecordStep(previousObservations, actions, reward, currentObservations, true);
                 cumulativeReward += reward;
 
-                // Salvar episódio
-                Debug.Log($"[RecordingProvider] Episódio terminado. Success={success}, Reward={cumulativeReward:F2}, Steps={stepCount}");
+                // Salvar episode
+                Debug.Log($"[RecordingProvider] Episode finished. Success={success}, Reward={cumulativeReward:F2}, Steps={stepCount}");
                 
                 // Para salvar, precisamos usar a estrutura esperada pelo SaveEpisode
-                // Por enquanto, chamamos FlushBatch para forçar salvamento dos dados já registrados
+                // For now, we call FlushBatch to force saving already registered data
                 recorder.FlushBatch();
 
-                // Reset para próximo episódio
+                // Reset para next episode
                 cumulativeReward = 0f;
                 stepCount = 0;
                 episodeStartTime = Time.time;

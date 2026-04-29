@@ -49,7 +49,7 @@ namespace ParkourRL.HybridSystem.Editor
                     collider.isTrigger = (data.name == "GoalPlatform");
                 }
                 
-                // Adicionar tag de goal na última plataforma
+                // Add goal tag to the last platform
                 if (data.name == "GoalPlatform")
                 {
                     platform.tag = "Goal";
@@ -108,18 +108,18 @@ namespace ParkourRL.HybridSystem.Editor
             // HybridParkourEnvironment
             var env = envObj.AddComponent<HybridParkourEnvironment>();
             
-            // Configurar referências (serão preenchidas manualmente ou via inspector)
+            // Configure references (will be filled manually or via inspector)
             envObj.AddComponent<HybridDataRecorder>();
             envObj.AddComponent<HybridTrainingManager>();
             
-            // Configurar parâmetros do ambiente
+            // Configure environment parameters
             SerializedObject envSerialized = new SerializedObject(env);
             envSerialized.FindProperty("marioSpacing").floatValue = 15f;
             envSerialized.FindProperty("syncResets").boolValue = true;
             envSerialized.FindProperty("showComparisonUI").boolValue = true;
             envSerialized.ApplyModifiedProperties();
             
-            Debug.Log("[HybridSceneBuilder] Ambiente híbrido criado");
+            Debug.Log("[HybridSceneBuilder] Hybrid environment created");
         }
         
         static void CreateCameras()
@@ -146,7 +146,7 @@ namespace ParkourRL.HybridSystem.Editor
             aiCamObj.transform.LookAt(new Vector3(7, 0, 0));
             aiCamObj.transform.parent = camerasRoot.transform;
             
-            Debug.Log("[HybridSceneBuilder] Câmeras criadas");
+            Debug.Log("[HybridSceneBuilder] Cameras created");
         }
         
         static void CreateUI()
@@ -235,23 +235,23 @@ namespace ParkourRL.HybridSystem.Editor
             light.shadows = LightShadows.Soft;
             lightObj.transform.rotation = Quaternion.Euler(50, -30, 0);
             
-            // Ambient light já configurado no início
+            // Ambient light already configured at the beginning
             
             Debug.Log("[HybridSceneBuilder] Lighting criado");
         }
         
         /// <summary>
-        /// Helper: Conecta as referências de um HybridParkourEnvironment existente
+        /// Helper: Connects the references of an existing HybridParkourEnvironment
         /// </summary>
         public static void SetupReferences()
         {
-            // Este método ajuda a conectar as referências após a cena ser criada
-            // Útil se o usuário quiser reconectar componentes
+            // This method helps connect references after the scene is created
+            // Useful if the user wants to reconnect components
             
             var env = Object.FindObjectOfType<HybridParkourEnvironment>();
             if (env == null)
             {
-                EditorUtility.DisplayDialog("Erro", "HybridParkourEnvironment não encontrado!", "OK");
+                EditorUtility.DisplayDialog("Error", "HybridParkourEnvironment not found!", "OK");
                 return;
             }
             
@@ -281,8 +281,8 @@ namespace ParkourRL.HybridSystem.Editor
                 {
                     transforms.Add(child);
                 }
-                // Nota: Atribuição de arrays em SerializedProperty é complexa
-                // Usuário pode precisar fazer manualmente no Inspector
+                // Note: Array assignment in SerializedProperty is complex
+                // User may need to do this manually in the Inspector
             }
             
             // Conectar DataRecorder
@@ -296,10 +296,10 @@ namespace ParkourRL.HybridSystem.Editor
             envSO.ApplyModifiedProperties();
             
             EditorUtility.DisplayDialog("Setup Complete", 
-                "Referências configuradas!\n\n" +
+                "References configured!\n\n" +
                 "Verifique o Inspector do HybridEnvironment:\n" +
-                "- Goal atribuído\n" +
-                "- Spawn points atribuídos\n" +
+                "- Goal assigned\n" +
+                "- Spawn points assigned\n" +
                 "- Recorder e Manager conectados", "OK");
         }
     }

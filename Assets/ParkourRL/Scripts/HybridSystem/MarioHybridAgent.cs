@@ -8,8 +8,8 @@ using System.Collections.Generic;
 namespace ParkourRL.HybridSystem
 {
     /// <summary>
-    /// Agente Mario híbrido: suporta modo gravação (para IL/Offline RL) e modo treino normal.
-    /// Trabalha em paralelo com um Mario player-controlled para comparação.
+    /// Hybrid Mario agent: supports recording mode (for IL/Offline RL) and normal training mode.
+    /// Works in parallel with a player-controlled Mario for comparison.
     /// </summary>
     public class MarioHybridAgent : Agent
     {
@@ -22,16 +22,16 @@ namespace ParkourRL.HybridSystem
         [SerializeField] private Transform targetGoal;
         
         [Header("Hybrid Mode")]
-        [Tooltip("Modo de operação: Recording = grava dados para IL/Offline, Training = treino RL normal")]
+        [Tooltip("Operation mode: Recording = records data for IL/Offline, Training = normal RL training")]
         [SerializeField] private HybridMode currentMode = HybridMode.Training;
-        // Campo removido - sincronização é feita pelo HybridParkourEnvironment
+        // Field removed - synchronization is done by HybridParkourEnvironment
         
         [Header("Recording Settings")]
-        [Tooltip("Referência ao recorder de dados")]
+        [Tooltip("Reference to the data recorder")]
         [SerializeField] private HybridDataRecorder dataRecorder;
-        [Tooltip("Só grava episódios bem-sucedidos")]
+        [Tooltip("Only records successful episodes")]
         [SerializeField] private bool onlyRecordSuccesses = false;
-        // Campo removido - usando variável local
+        // Field removed - using local variable
 
         [Header("Observations")]
         [SerializeField] private int raycastCount = 8;
@@ -50,7 +50,7 @@ namespace ParkourRL.HybridSystem
         private float previousDistanceToGoal;
         private float episodeTime;
         private float bestDistanceToGoal;
-        // Campo removido - não utilizado
+        // Field removed - not used
         private List<HybridTransition> currentEpisodeData = new List<HybridTransition>();
         
         private const float MAX_EPISODE_TIME = 30f;
@@ -59,10 +59,10 @@ namespace ParkourRL.HybridSystem
         public enum HybridMode
         {
             Training,      // Treino RL normal
-            Recording      // Gravação para IL/Offline RL
+            Recording      // Recording for IL/Offline RL
         }
 
-        // Estrutura para armazenar transições
+        // Structure to store transitions
         public struct HybridTransition
         {
             public Vector3 position;
@@ -83,7 +83,7 @@ namespace ParkourRL.HybridSystem
         public void SetMode(HybridMode mode)
         {
             currentMode = mode;
-            Debug.Log($"[MarioHybrid] Modo alterado para: {mode}");
+            Debug.Log($"[MarioHybrid] Mode changed to: {mode}");
         }
 
         public override void Initialize()
@@ -127,10 +127,10 @@ namespace ParkourRL.HybridSystem
             previousPosition = transform.position;
             episodeTime = 0f;
             
-            // Limpar dados do episódio anterior
+            // Clear data from previous episode
             currentEpisodeData.Clear();
             
-            // Notificar recorder de novo episódio
+            // Notify recorder of new episode
             if (dataRecorder != null && currentMode == HybridMode.Recording)
             {
                 dataRecorder.StartEpisode();
@@ -152,12 +152,12 @@ namespace ParkourRL.HybridSystem
             Vector3 envOffset = environment != null ? environment.transform.position : Vector3.zero;
             Vector3 localPosition = position - envOffset;
 
-            // [3 obs] Posição normalizada
+            // [3 obs] Normalized position
             sensor.AddObservation(localPosition.x / 25f);
             sensor.AddObservation(localPosition.y / 10f);
             sensor.AddObservation(localPosition.z / 25f);
 
-            // [4 obs] Direção ao goal
+            // [4 obs] Direction to goal
             if (targetGoal != null)
             {
                 Vector3 toGoal = targetGoal.position - position;
@@ -180,7 +180,7 @@ namespace ParkourRL.HybridSystem
             sensor.AddObservation(Mathf.Clamp(velocity.y / 10f, -1f, 1f));
             sensor.AddObservation(Mathf.Clamp(velocity.z / 10f, -1f, 1f));
 
-            // [1 obs] Está no ar?
+            // [1 obs] Is airborne?
             bool isGrounded = Physics.RaycastNonAlloc(position + Vector3.up * 0.1f, Vector3.down, raycastHitsCache, 0.5f) > 0;
             sensor.AddObservation(isGrounded ? 0f : 1f);
 
@@ -202,7 +202,7 @@ namespace ParkourRL.HybridSystem
                 }
             }
 
-            // [1 obs] Altura do chão
+            // [1 obs] Ground height
             if (Physics.RaycastNonAlloc(position + Vector3.up * 0.5f, Vector3.down, raycastHitsCache, 20f) > 0)
             {
                 sensor.AddObservation(raycastHitsCache[0].distance / 20f);
@@ -215,7 +215,7 @@ namespace ParkourRL.HybridSystem
             // [1 obs] Jump button
             sensor.AddObservation(jumpPressed ? 1f : 0f);
 
-            // [1 obs] Tempo normalizado
+            // [1 obs] Normalized time
             sensor.AddObservation(episodeTime / MAX_EPISODE_TIME);
         }
 
@@ -228,7 +228,7 @@ namespace ParkourRL.HybridSystem
             );
             jumpPressed = actions.DiscreteActions[0] == 1;
 
-            // Câmera aponta para goal
+            // Camera points toward goal
             if (targetGoal != null)
             {
                 cameraLookDirection = (targetGoal.position - transform.position).normalized;
@@ -243,7 +243,7 @@ namespace ParkourRL.HybridSystem
             float currentDistance = GetDistanceToGoal();
             float distanceDelta = previousDistanceToGoal - currentDistance;
 
-            // Recompensas padrão
+            // Default rewards
             AddReward(-0.01f);
             
             if (distanceDelta > 0.01f)
@@ -260,13 +260,13 @@ namespace ParkourRL.HybridSystem
             previousDistanceToGoal = currentDistance;
             previousPosition = currentPos;
 
-            // ===== GRAVAÇÃO DE DADOS (modo Recording) =====
+            // ===== DATA RECORDING (Recording mode) =====
             if (currentMode == HybridMode.Recording)
             {
                 RecordTransition(actions, GetCumulativeReward(), false);
             }
 
-            // Condições de término
+            // Termination conditions
             if (currentPos.y < startPosition.y - 3.0f)
             {
                 AddReward(-5.0f);
@@ -321,7 +321,7 @@ namespace ParkourRL.HybridSystem
             
             if (onlyRecordSuccesses && !success)
             {
-                Debug.Log("[MarioHybrid] Episódio falho descartado (onlyRecordSuccesses=true)");
+                Debug.Log("[MarioHybrid] Failed episode discarded (onlyRecordSuccesses=true)");
                 return;
             }
             
