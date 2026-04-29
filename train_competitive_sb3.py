@@ -280,12 +280,12 @@ def main():
                             
                     elif "SAC" in name:
                         sac.replay_buffer.add(old_obs, next_obs, sb3_actions[name], reward, done, [{}])
-                        if step > sac.learning_starts:
+                        if step > sac.learning_starts and step % 10 == 0:
                             sac.train(batch_size=sac.batch_size, gradient_steps=1)
                             
                     elif "DQN" in name:
                         dqn.replay_buffer.add(old_obs, next_obs, np.array([sb3_actions[name]]), reward, done, [{}])
-                        if step > dqn.learning_starts:
+                        if step > dqn.learning_starts and step % 10 == 0:
                             dqn.train(batch_size=dqn.batch_size, gradient_steps=1)
 
                     obs_dict[name] = next_obs
@@ -352,14 +352,21 @@ def main():
                     ppo_name = next((n for n in behavior_names if "PPO" in n), None)
                     sac_name = next((n for n in behavior_names if "SAC" in n), None)
                     dqn_name = next((n for n in behavior_names if "DQN" in n), None)
+                    
+                    # Info de episodios em progresso
+                    in_progress = []
+                    for n in behavior_names:
+                        short = model_types.get(n, "?")
+                        ep_time = now - ep_start_times[n]
+                        in_progress.append(f"{short}:{ep_rewards[n]:.1f}r/{ep_time:.0f}s")
+                    progress_str = ", ".join(in_progress)
+                    
                     print(
                         f"[Progress] Step: {step} | "
-                        f"Total Eps: {total_eps} | "
-                        f"Eps/min: {eps_per_min:.1f} | "
+                        f"Eps: {total_eps} ({eps_per_min:.1f}/min) | "
                         f"Elapsed: {total_elapsed:.0f}s | "
-                        f"PPO: {ep_counts.get(ppo_name, 0)} | "
-                        f"SAC: {ep_counts.get(sac_name, 0)} | "
-                        f"DQN: {ep_counts.get(dqn_name, 0)}"
+                        f"PPO:{ep_counts.get(ppo_name, 0)} SAC:{ep_counts.get(sac_name, 0)} DQN:{ep_counts.get(dqn_name, 0)} | "
+                        f"Running: [{progress_str}]"
                     )
                     last_progress_time = now
 
