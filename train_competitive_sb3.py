@@ -3,6 +3,7 @@ import argparse
 import numpy as np
 import torch
 import mlflow
+import time as time_module
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 
@@ -132,11 +133,6 @@ def main():
             ppo = PPO.load(ppo_path, env=env_ppo_sac) if os.path.exists(ppo_path) else PPO("MlpPolicy", env_ppo_sac, n_steps=2048, batch_size=64, learning_rate=0.0003, device="auto")
             sac = SAC.load(sac_path, env=env_ppo_sac) if os.path.exists(sac_path) else SAC("MlpPolicy", env_ppo_sac, buffer_size=50000, batch_size=256, learning_starts=1000, device="auto")
             dqn = DQN.load(dqn_path, env=env_dqn) if os.path.exists(dqn_path) else DQN("MlpPolicy", env_dqn, buffer_size=50000, batch_size=128, learning_starts=1000, exploration_fraction=0.2, device="auto")
-            # Configurar logger para modelos carregados tambem
-            if not hasattr(sac, '_logger') or sac._logger is None:
-                sac.set_logger(Logger(folder=None, output_formats=["stdout"]))
-            if not hasattr(dqn, '_logger') or dqn._logger is None:
-                dqn.set_logger(Logger(folder=None, output_formats=["stdout"]))
         else:
             ppo = PPO("MlpPolicy", env_ppo_sac, n_steps=2048, batch_size=64, learning_rate=0.0003, device="auto", tensorboard_log=args.tb_logdir)
             sac = SAC("MlpPolicy", env_ppo_sac, buffer_size=50000, batch_size=256, learning_starts=1000, device="auto", tensorboard_log=args.tb_logdir)
@@ -157,6 +153,7 @@ def main():
         behavior_names = list(env.behavior_specs.keys())
         print(f"[*] Behaviors detectados na cena: {behavior_names}")
 
+        # Observacoes iniciais
         obs_dict = {}
         for name in behavior_names:
             dec, term = env.get_steps(name)
@@ -165,9 +162,14 @@ def main():
             else:
                 obs_dict[name] = np.zeros(42, dtype=np.float32)
 
+        # Metricas por agente
         ep_rewards = {name: 0.0 for name in behavior_names}
         ep_counts = {name: 0 for name in behavior_names}
         ep_lengths = {name: 0 for name in behavior_names}
+        ep_start_times = {name: time_module.time() for name in behavior_names}
+        
+        # Dados do ultimo action para PPO (precisa guardar entre steps)
+        last_ppo_data = {}
         
         # Metricas agregadas por modelo
         model_types = {}
@@ -181,7 +183,13 @@ def main():
             else:
                 model_types[name] = "Unknown"
 
+        # Contadores de PPO para episode_start
+        ppo_episode_start = {name: True for name in behavior_names if "PPO" in name}
+
         step = 0
+        last_progress_time = time_module.time()
+        training_start_time = time_module.time()
+        
         try:
             print("[*] Treinamento competitivo iniciado com sucesso!")
             while True:
@@ -196,7 +204,6 @@ def main():
                             obs_t = torch.tensor(obs, dtype=torch.float32).unsqueeze(0).to(ppo.device)
                             action, value, log_prob = ppo.policy.forward(obs_t)
                         act_np = action.cpu().numpy()[0]
-                        # Manter tensores para o buffer, mas numpy para envio
                         sb3_actions[name] = (act_np, action, value, log_prob)
                         actions_to_send[name] = convert_box_action(act_np)
                         
@@ -225,6 +232,8 @@ def main():
                         continue
                     
                     dec, term = env.get_steps(name)
+                    
+                    # Processar terminal steps (episodio acabou)
                     if len(term) > 0:
                         next_obs = term.obs[0][0]
                         reward = term.reward[0]
@@ -234,6 +243,7 @@ def main():
                         reward = dec.reward[0]
                         done = False
                     else:
+                        # Nenhum dado neste step (DecisionPeriod > 1)
                         continue
                         
                     ep_rewards[name] += reward
@@ -242,17 +252,29 @@ def main():
 
                     if "PPO" in name:
                         act_np, action_t, value_t, log_prob_t = sb3_actions[name]
-                        # Converter para tensores se necessario
                         if not isinstance(value_t, torch.Tensor):
                             value_t = torch.tensor(value_t).to(ppo.device)
                         if not isinstance(log_prob_t, torch.Tensor):
                             log_prob_t = torch.tensor(log_prob_t).to(ppo.device)
-                        ppo.rollout_buffer.add(old_obs, act_np, reward, done, value_t, log_prob_t)
+                        
+                        # CORRECAO: 4o argumento e episode_start (NOT done)
+                        # episode_start=True no primeiro step apos reset
+                        is_episode_start = ppo_episode_start.get(name, False)
+                        ppo.rollout_buffer.add(
+                            old_obs, act_np, reward,
+                            is_episode_start,  # episode_start, NAO done
+                            value_t, log_prob_t
+                        )
+                        ppo_episode_start[name] = False  # Proximo step nao e inicio
+                        
                         if ppo.rollout_buffer.full:
                             with torch.no_grad():
                                 next_obs_t = torch.tensor(next_obs, dtype=torch.float32).unsqueeze(0).to(ppo.device)
                                 last_value = ppo.policy.predict_values(next_obs_t).flatten()
-                            ppo.rollout_buffer.compute_returns_and_advantage(last_values=last_value, dones=np.array([done]))
+                            ppo.rollout_buffer.compute_returns_and_advantage(
+                                last_values=last_value, 
+                                dones=np.array([done])
+                            )
                             ppo.train()
                             ppo.rollout_buffer.reset()
                             
@@ -271,23 +293,39 @@ def main():
                     if done:
                         ep_counts[name] += 1
                         model = model_types.get(name, "Unknown")
-                        print(f"[{name}] Episodio {ep_counts[name]} finalizado | Recompensa: {ep_rewards[name]:.2f} | Length: {ep_lengths[name]}")
+                        elapsed = time_module.time() - ep_start_times[name]
+                        
+                        print(
+                            f"[{name}] Ep {ep_counts[name]} | "
+                            f"Reward: {ep_rewards[name]:.2f} | "
+                            f"Steps: {ep_lengths[name]} | "
+                            f"Time: {elapsed:.1f}s | "
+                            f"Total steps: {step}"
+                        )
                         
                         clean_name = name.replace("?", "_").replace("=", "_").replace("-", "_")
                         mlflow.log_metric(f"{clean_name}_reward", ep_rewards[name], step=ep_counts[name])
                         mlflow.log_metric(f"{clean_name}_length", ep_lengths[name], step=ep_counts[name])
+                        mlflow.log_metric(f"{clean_name}_time", elapsed, step=ep_counts[name])
                         
                         # TensorBoard
                         tb_writer.add_scalar(f"Rewards/{clean_name}", ep_rewards[name], ep_counts[name])
                         tb_writer.add_scalar(f"EpisodeLength/{clean_name}", ep_lengths[name], ep_counts[name])
+                        tb_writer.add_scalar(f"EpisodeTime/{clean_name}", elapsed, ep_counts[name])
                         tb_writer.add_scalar(f"ModelRewards/{model}", ep_rewards[name], ep_counts[name])
                         
                         ep_rewards[name] = 0.0
                         ep_lengths[name] = 0
+                        ep_start_times[name] = time_module.time()
                         
+                        # Marcar proximo step como inicio de episodio para PPO
+                        if "PPO" in name:
+                            ppo_episode_start[name] = True
+                        
+                        # Checkpoint a cada 50 episodios
                         if ep_counts[name] % 50 == 0:
-                            model_path = f"models/{args.run_id}/{name}_model.zip"
-                            onnx_path = f"models/{args.run_id}/{name}_model.onnx"
+                            model_path = f"models/{args.run_id}/{clean_name}_model.zip"
+                            onnx_path = f"models/{args.run_id}/{clean_name}_model.onnx"
                             os.makedirs(os.path.dirname(model_path), exist_ok=True)
                             
                             if "PPO" in name: 
@@ -304,6 +342,26 @@ def main():
                             mlflow.log_artifact(onnx_path, "models_checkpoints")
 
                 step += 1
+                
+                # Log de progresso a cada 30 segundos
+                now = time_module.time()
+                if now - last_progress_time > 30.0:
+                    total_elapsed = now - training_start_time
+                    total_eps = sum(ep_counts.values())
+                    eps_per_min = total_eps / (total_elapsed / 60.0) if total_elapsed > 0 else 0
+                    ppo_name = next((n for n in behavior_names if "PPO" in n), None)
+                    sac_name = next((n for n in behavior_names if "SAC" in n), None)
+                    dqn_name = next((n for n in behavior_names if "DQN" in n), None)
+                    print(
+                        f"[Progress] Step: {step} | "
+                        f"Total Eps: {total_eps} | "
+                        f"Eps/min: {eps_per_min:.1f} | "
+                        f"Elapsed: {total_elapsed:.0f}s | "
+                        f"PPO: {ep_counts.get(ppo_name, 0)} | "
+                        f"SAC: {ep_counts.get(sac_name, 0)} | "
+                        f"DQN: {ep_counts.get(dqn_name, 0)}"
+                    )
+                    last_progress_time = now
 
         except KeyboardInterrupt:
             print("[!] Treinamento interrompido pelo usuario. Salvando modelos finais...")

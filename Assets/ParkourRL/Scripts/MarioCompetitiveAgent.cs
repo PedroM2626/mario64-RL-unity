@@ -297,7 +297,7 @@ namespace ParkourRL
             }
 
             // ========== RECOMPENSAS COMPETITIVAS ==========
-            episodeTime += Time.fixedDeltaTime;
+            // NOTA: episodeTime agora e incrementado no FixedUpdate para ser preciso
             Vector3 currentPos = transform.position;
             float currentDistance = GetDistanceToGoal();
 
@@ -324,37 +324,8 @@ namespace ParkourRL
                 bestDistanceToGoal = currentDistance;
             }
 
-            // -- Bonus por estar na frente (Removido para o modo de teste simultâneo puro) --
-            // A cada 100 steps, verifica ranking (apenas comentado)
-            /*
-            if (StepCount > 0 && StepCount % 100 == 0)
-            {
-                float rank = GetCurrentRanking(); // 0=ultimo, 1=primeiro
-                if (rank > 0.7f) AddReward(0.5f);  // Liderando
-                else if (rank < 0.3f) AddReward(-0.2f); // Perdendo
-            }
-            */
-
             previousDistanceToGoal = currentDistance;
             previousPosition = currentPos;
-
-            // -- Morte por queda --
-            if (currentPos.y < startPosition.y - 3.0f)
-            {
-                float progressRatio = 1.0f - (currentDistance / Mathf.Max(initialDistanceToGoal, 0.1f));
-                AddReward(-2.0f + progressRatio * 1.0f);
-                EndEpisode();
-                return;
-            }
-
-            // -- Timeout --
-            if (episodeTime >= MAX_EPISODE_TIME)
-            {
-                float progressRatio = 1.0f - (currentDistance / Mathf.Max(initialDistanceToGoal, 0.1f));
-                AddReward(-8.0f + progressRatio * 3.0f);
-                EndEpisode();
-                return;
-            }
         }
 
         public override void Heuristic(in ActionBuffers actionsOut)
@@ -379,7 +350,32 @@ namespace ParkourRL
 
         void FixedUpdate()
         {
+            if (hasFinished) return;
+
+            // Timer do episodio - roda a cada FixedUpdate para ser preciso
             timeSinceEpisodeStart += Time.fixedDeltaTime;
+            episodeTime += Time.fixedDeltaTime;
+
+            // Morte por queda (checada a cada frame de fisica)
+            Vector3 currentPos = transform.position;
+            if (currentPos.y < startPosition.y - 3.0f)
+            {
+                float currentDistance = GetDistanceToGoal();
+                float progressRatio = 1.0f - (currentDistance / Mathf.Max(initialDistanceToGoal, 0.1f));
+                AddReward(-2.0f + progressRatio * 1.0f);
+                EndEpisode();
+                return;
+            }
+
+            // Timeout (checado a cada frame de fisica)
+            if (episodeTime >= MAX_EPISODE_TIME)
+            {
+                float currentDistance = GetDistanceToGoal();
+                float progressRatio = 1.0f - (currentDistance / Mathf.Max(initialDistanceToGoal, 0.1f));
+                AddReward(-8.0f + progressRatio * 3.0f);
+                EndEpisode();
+                return;
+            }
 
             // Se apos o periodo de graca, OnActionReceived nunca foi chamado,
             // ativar acoes de fallback (exploracao aleatoria)
@@ -389,7 +385,7 @@ namespace ParkourRL
                 Debug.Log($"[{name}] Nenhum trainer detectado apos {TRAINER_GRACE_PERIOD}s. Ativando acoes de exploracao aleatoria.");
             }
 
-            if (usingFallbackActions && !hasFinished)
+            if (usingFallbackActions)
             {
                 randomActionTimer += Time.fixedDeltaTime;
                 if (randomActionTimer >= RANDOM_ACTION_INTERVAL)
@@ -398,9 +394,8 @@ namespace ParkourRL
                     GenerateRandomActions();
                 }
 
-                // Aplicar recompensas e logica de episodio manualmente,
-                // pois OnActionReceived nao esta sendo chamado
-                ApplyEpisodeLogic();
+                // Aplicar recompensas no modo fallback
+                ApplyFallbackRewards();
             }
         }
 
@@ -427,9 +422,8 @@ namespace ParkourRL
             }
         }
 
-        private void ApplyEpisodeLogic()
+        private void ApplyFallbackRewards()
         {
-            episodeTime += Time.fixedDeltaTime;
             Vector3 currentPos = transform.position;
             float currentDistance = GetDistanceToGoal();
 
@@ -458,24 +452,6 @@ namespace ParkourRL
 
             previousDistanceToGoal = currentDistance;
             previousPosition = currentPos;
-
-            // -- Morte por queda --
-            if (currentPos.y < startPosition.y - 3.0f)
-            {
-                float progressRatio = 1.0f - (currentDistance / Mathf.Max(initialDistanceToGoal, 0.1f));
-                AddReward(-2.0f + progressRatio * 1.0f);
-                EndEpisode();
-                return;
-            }
-
-            // -- Timeout --
-            if (episodeTime >= MAX_EPISODE_TIME)
-            {
-                float progressRatio = 1.0f - (currentDistance / Mathf.Max(initialDistanceToGoal, 0.1f));
-                AddReward(-8.0f + progressRatio * 3.0f);
-                EndEpisode();
-                return;
-            }
         }
 
         // ===== METODOS PUBLICOS =====

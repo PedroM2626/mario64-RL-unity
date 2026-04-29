@@ -277,6 +277,17 @@ namespace ParkourRL
                     materialField.SetValue(sm64Mario, runtimeMat);
             }
 
+            // 5.5. Collider que corresponde ao mesh do Mario para colisao Unity
+            var capsule = marioObj.AddComponent<CapsuleCollider>();
+            capsule.center = new Vector3(0, 0.5f, 0);
+            capsule.radius = 0.3f;
+            capsule.height = 1.0f;
+            capsule.isTrigger = false;
+
+            var rb = marioObj.AddComponent<Rigidbody>();
+            rb.isKinematic = true; // SM64 controla a posicao, nao a fisica do Unity
+            rb.useGravity = false;
+
             // 6. Agente competitivo DEPOIS de BehaviorParameters
             MarioCompetitiveAgent agent = marioObj.AddComponent<MarioCompetitiveAgent>();
             agent.teamId = index;
