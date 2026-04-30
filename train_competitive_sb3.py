@@ -197,8 +197,7 @@ def main():
                 # ---- Single get_steps per iteration (standard ML-Agents pattern) ----
                 # This returns results from the PREVIOUS env.step() (or env.reset()).
                 # We process rewards/terminals AND compute new actions in one pass.
-                if step < 5000:
-                    print(f"--- Python Loop Start: Step {step} ---")
+
 
                 actions_to_send = {}
                 sb3_actions = {}
@@ -206,13 +205,7 @@ def main():
                 for name in behavior_names:
                     dec, term = env.get_steps(name)
 
-                    # Aggressive Debug Logging for the first 5000 steps
-                    if step < 5000:
-                        if len(dec) > 0 or len(term) > 0:
-                            short = name.split("?")[0].replace("MarioParkour", "")
-                            d_ids = list(dec.agent_id) if len(dec) > 0 else []
-                            t_ids = list(term.agent_id) if len(term) > 0 else []
-                            print(f"[DBG-STEP {step}] {short} -> dec:{len(dec)} {d_ids} term:{len(term)} {t_ids}")
+
 
                     # --- 1) Process terminal steps (episode ended) ---
                     if len(term) > 0:
@@ -364,17 +357,9 @@ def main():
                             actions_to_send[name] = convert_dqn_action(action)
 
                 # --- 4) Send actions and advance simulation ---
-                if step < 5000 and len(actions_to_send) > 0:
-                    actions_str = ", ".join([f"{name}: {actions_to_send[name].continuous[0]}" for name in actions_to_send])
-                    print(f"[DBG-ACT {step}] Sending: {actions_str}")
-                
                 for name in actions_to_send:
                     env.set_actions(name, actions_to_send[name])
                 
-                if "MarioParkourPPO?team=0" in env._env_actions:
-                    ppo_action = env._env_actions["MarioParkourPPO?team=0"]
-                    print(f"[DBG-PROTO] PPO ActionTuple continuous shape: {ppo_action.continuous.shape}")
-                    
                 env.step()
 
                 # Merge new actions into persistent store

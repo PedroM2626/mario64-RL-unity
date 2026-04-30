@@ -66,17 +66,7 @@ namespace ParkourRL
             bestCompletionTime = MAX_EPISODE_TIME;
         }
         
-        new void OnEnable()
-        {
-            base.OnEnable();
-            Debug.Log($"[{name}] OnEnable called - BehaviorParameters: {GetComponent<Unity.MLAgents.Policies.BehaviorParameters>() != null}");
-        }
-        
-        new void OnDisable()
-        {
-            base.OnDisable();
-            Debug.Log($"[{name}] OnDisable called");
-        }
+
 
         public override void Initialize()
         {
@@ -88,9 +78,7 @@ namespace ParkourRL
             if (bp != null && bp.BrainParameters.VectorObservationSize != 42)
             {
                 bp.BrainParameters.VectorObservationSize = 42;
-                Debug.Log($"[{name}] VectorObservationSize corrected to 42");
             }
-            Debug.Log($"[{name}] Initialize completed. BehaviorName: {(bp != null ? bp.BehaviorName : "null")}");
         }
 
         public override void OnEpisodeBegin()
@@ -251,10 +239,8 @@ namespace ParkourRL
         
         public override void OnActionReceived(ActionBuffers actions)
         {
-            Debug.Log($"[{name}] OnActionReceived TRIGGERED!");
             if (hasFinished) 
             {
-                Debug.Log($"[{name}] OnActionReceived ignored because hasFinished is true!");
                 return;
             }
             actionReceivedThisEpisode = true;
@@ -263,13 +249,11 @@ namespace ParkourRL
             if (usingFallbackActions)
             {
                 usingFallbackActions = false;
-                Debug.Log($"[{name}] Trainer connected! Deactivating fallback.");
             }
             
             // Log on first action received
             if (!firstActionReceived)
             {
-                Debug.Log($"[{name}] FIRST ACTION RECEIVED! Continuous: [{actions.ContinuousActions[0]:F2}, {actions.ContinuousActions[1]:F2}], Discrete: [{actions.DiscreteActions[0]}, {actions.DiscreteActions[1]}, {actions.DiscreteActions[2]}]");
                 firstActionReceived = true;
             }
 
@@ -287,7 +271,6 @@ namespace ParkourRL
             // Log every 2 seconds for debug
             if (Time.time - lastActionLogTime > 2f)
             {
-                Debug.Log($"[ActionDebug] {name}: Joystick={joystickInput}, Jump={jumpPressed}, Kick={kickPressed}, Stomp={stompPressed}");
                 lastActionLogTime = Time.time;
             }
 
@@ -352,28 +335,7 @@ namespace ParkourRL
             }
         }
 
-        private float lastDiagnosticTime = 0f;
-        
-        void Update()
-        {
-            if (Time.time - lastDiagnosticTime > 1f)
-            {
-                lastDiagnosticTime = Time.time;
-                var agents = FindObjectsOfType<MarioCompetitiveAgent>();
-                string allAgentsStr = "All Agents: ";
-                var field = typeof(Unity.MLAgents.Agent).GetField("m_EpisodeId", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                if (field != null)
-                {
-                    foreach (var a in agents)
-                    {
-                        int id = (int)field.GetValue(a);
-                        allAgentsStr += $"[{a.name}: id={id}, active={a.gameObject.activeInHierarchy}] ";
-                    }
-                }
-                
-                Debug.Log($"[Diagnostic] AcademyStep: {Academy.Instance.StepCount} | {allAgentsStr}");
-            }
-        }
+
 
         void FixedUpdate()
         {
@@ -518,11 +480,9 @@ namespace ParkourRL
                 if (competitiveEnv != null)
                 {
                     ranking = competitiveEnv.RegisterFinish(this);
-                    Debug.Log($"[Mario T{teamId}] GOAL! Posicao #{ranking} | Tempo: {episodeTime:F1}s");
                 }
 
                 AddReward(50f + timeBonus + recordBonus);
-                Debug.Log($"[Mario T{teamId}] Reward total: +{50f + timeBonus + recordBonus:F1}");
                 EndEpisode();
             }
         }
