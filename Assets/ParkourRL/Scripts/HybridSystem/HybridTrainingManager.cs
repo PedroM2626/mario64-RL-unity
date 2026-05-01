@@ -44,7 +44,27 @@ namespace ParkourRL.HybridSystem
 
         void Start()
         {
-            currentMode = initialMode;
+            // Check if environment has a different mode set in inspector
+            // Environment's choice takes priority
+            if (environment != null)
+            {
+                bool envIsRecording = environment.CurrentMode == HybridParkourEnvironment.HybridMode.Recording;
+                bool managerIsRecording = initialMode == HybridMode.Recording;
+                
+                if (envIsRecording != managerIsRecording)
+                {
+                    Debug.Log($"[HybridManager] Syncing with Environment mode: {environment.CurrentMode}");
+                    currentMode = envIsRecording ? HybridMode.Recording : HybridMode.Training;
+                }
+                else
+                {
+                    currentMode = initialMode;
+                }
+            }
+            else
+            {
+                currentMode = initialMode;
+            }
             
             SetupUI();
             ApplyMode();
@@ -104,6 +124,16 @@ namespace ParkourRL.HybridSystem
             if (currentMode == mode) return;
             
             currentMode = mode;
+            
+            // Propagate mode change to environment (user explicitly changed mode)
+            if (environment != null)
+            {
+                var envMode = (mode == HybridMode.Recording) 
+                    ? HybridParkourEnvironment.HybridMode.Recording 
+                    : HybridParkourEnvironment.HybridMode.Training;
+                environment.SetMode(envMode);
+            }
+            
             ApplyMode();
             
             Debug.Log($"[HybridManager] Mode changed to: {mode}");
@@ -116,10 +146,20 @@ namespace ParkourRL.HybridSystem
 
         private void ApplyMode()
         {
-            // Apply to environment
+            // Note: We no longer force mode on environment
+            // The environment's inspector choice has priority
+            // Only sync if environment exists and modes differ (for runtime mode changes)
             if (environment != null)
             {
-                environment.SetMode(currentMode);
+                bool envIsRecording = environment.CurrentMode == HybridParkourEnvironment.HybridMode.Recording;
+                bool managerIsRecording = currentMode == HybridMode.Recording;
+                
+                if (envIsRecording != managerIsRecording)
+                {
+                    // Only apply if manager is explicitly changing mode (not on startup)
+                    // This is handled by the caller (SetMode/ToggleMode)
+                    Debug.Log($"[HybridManager] Mode mismatch with Environment. Env: {environment.CurrentMode}, Manager: {currentMode}");
+                }
             }
             
             // Configurar recorder

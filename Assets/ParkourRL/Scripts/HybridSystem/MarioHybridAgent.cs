@@ -54,6 +54,8 @@ namespace ParkourRL.HybridSystem
         private List<HybridTransition> currentEpisodeData = new List<HybridTransition>();
         
         private const float MAX_EPISODE_TIME = 30f;
+        private const float SPAWN_GRACE_PERIOD = 2.0f;  // Grace period after spawn to prevent immediate fall death
+        private float lastSpawnTime = 0f;
         private RaycastHit[] raycastHitsCache = new RaycastHit[1];
 
         public enum HybridMode
@@ -109,10 +111,33 @@ namespace ParkourRL.HybridSystem
 
         public override void OnEpisodeBegin()
         {
+            // Cancel any pending actions to prevent duplicates
+            lastSpawnTime = Time.time;  // Reset grace period
+            
             if (environment != null)
             {
-                environment.ResetEnvironment();
+                // Don't call ResetEnvironment here - it causes infinite loop
+                // Just get the spawn point
                 startPosition = environment.GetCurrentSpawnPoint();
+                
+                // IMPORTANT: Do NOT call SetActive in OnEpisodeBegin - it causes recursion!
+                // Just reposition and teleport
+                Vector3 spawnPos = startPosition + Vector3.up * 2f;
+                transform.position = spawnPos;
+                
+                // Reset velocity
+                Rigidbody rb = GetComponent<Rigidbody>();
+                if (rb != null)
+                {
+                    rb.velocity = Vector3.zero;
+                    rb.angularVelocity = Vector3.zero;
+                }
+                
+                // Teleport in SM64
+                if (marioComponent != null && marioComponent.isActiveAndEnabled)
+                {
+                    marioComponent.Teleport(spawnPos);
+                }
             }
             else
             {
@@ -266,17 +291,28 @@ namespace ParkourRL.HybridSystem
                 RecordTransition(actions, GetCumulativeReward(), false);
             }
 
-            // Termination conditions
-            if (currentPos.y < startPosition.y - 3.0f)
+            // Termination conditions - skip during grace period
+            if (Time.time - lastSpawnTime > SPAWN_GRACE_PERIOD)
             {
-                AddReward(-5.0f);
-                
-                if (currentMode == HybridMode.Recording)
+                if (currentPos.y < startPosition.y - 3.0f)
                 {
-                    RecordTransition(actions, GetCumulativeReward(), true);
-                    SaveEpisodeData(false);
+                    AddReward(-5.0f);
+                    
+                    if (currentMode == HybridMode.Recording)
+                    {
+                        RecordTransition(actions, GetCumulativeReward(), true);
+                        SaveEpisodeData(false);
+                    }
+                    
+                    EndEpisode();
+                    return;
                 }
-                
+            }
+            
+            if (currentPos.y < startPosition.y - 10f)
+            {
+                // Hard fail - fell way too far, end episode even during grace period
+                AddReward(-10.0f);
                 EndEpisode();
                 return;
             }
@@ -364,6 +400,33 @@ namespace ParkourRL.HybridSystem
         public void SetDataRecorder(HybridDataRecorder recorder)
         {
             dataRecorder = recorder;
+        }
+        
+        private System.Collections.IEnumerator TeleportAfterActivation(Vector3 position)
+        {
+            // Wait for activation to complete
+            yield return new WaitForFixedUpdate();
+            yield return null;
+            
+            if (marioComponent != null && marioComponent.isActiveAndEnabled)
+            {
+                marioComponent.Teleport(position);
+                Debug.Log($"[MarioHybrid] Teleported to {position}");
+            }
+            
+            // Validate after a few frames
+            yield return new WaitForFixedUpdate();
+            yield return new WaitForFixedUpdate();
+            
+            if (transform.position.y < position.y - 2f)
+            {
+                Debug.LogWarning($"[MarioHybrid] Mario fell after spawn! Repositioning...");
+                transform.position = position;
+                if (marioComponent != null && marioComponent.isActiveAndEnabled)
+                {
+                    marioComponent.Teleport(position);
+                }
+            }
         }
     }
 }

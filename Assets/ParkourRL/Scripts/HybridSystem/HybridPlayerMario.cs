@@ -39,6 +39,8 @@ namespace ParkourRL.HybridSystem
         private float lastRecordTime;
         private bool isRecording = false;
         private bool episodeCompleted = false;
+        private float spawnGracePeriod = 2.0f;  // Grace period after spawn to prevent immediate fall death
+        private float lastSpawnTime = 0f;
         private List<HybridTransition> currentTransitions = new List<HybridTransition>();
         
         // Raycast cache
@@ -122,6 +124,11 @@ namespace ParkourRL.HybridSystem
 
         private void CheckFallDeath()
         {
+            // Don't check for fall death during grace period after spawn
+            if (Time.time - lastSpawnTime < spawnGracePeriod)
+                return;
+            
+            // Check if fell off the platform
             if (transform.position.y < startPosition.y - 5f)
             {
                 OnEpisodeEnd(false);
@@ -131,6 +138,9 @@ namespace ParkourRL.HybridSystem
         private void OnEpisodeEnd(bool success)
         {
             if (episodeCompleted) return;
+            
+            // Cancel any pending reset to prevent duplicates
+            CancelInvoke(nameof(ResetPlayer));
             
             episodeCompleted = true;
             isRecording = false;
@@ -151,8 +161,11 @@ namespace ParkourRL.HybridSystem
             
             Debug.Log($"[HybridPlayer] Episode finished: {(success ? "SUCCESS" : "FAILED")} em {episodeTime:F2}s");
             
-            // Auto-reset after delay
-            Invoke(nameof(ResetPlayer), 2f);
+            // Auto-reset after delay - only if not already resetting
+            if (!IsInvoking(nameof(ResetPlayer)))
+            {
+                Invoke(nameof(ResetPlayer), 2f);
+            }
         }
 
         private void RecordTransition()
@@ -263,16 +276,25 @@ namespace ParkourRL.HybridSystem
 
             public void ResetPlayer()
         {
+            // Cancel any pending reset invokes to prevent multiple resets
+            CancelInvoke(nameof(ResetPlayer));
+            
             episodeCompleted = false;
             isRecording = true;
             currentTransitions.Clear();
+            lastSpawnTime = Time.time;  // Reset grace period
             
             Vector3 respawnPosition = startPosition + Vector3.up * 2f;
             
-            // Teleportar
+            // Deactivate, reposition, then reactivate to ensure clean state
             if (marioComponent != null)
             {
+                // Hard reset: deactivate first
+                gameObject.SetActive(false);
+                
+                // Set position
                 transform.position = respawnPosition;
+                previousPosition = respawnPosition;
                 
                 // Reset rigidbody velocity
                 Rigidbody rb = GetComponent<Rigidbody>();
@@ -280,19 +302,21 @@ namespace ParkourRL.HybridSystem
                 {
                     rb.velocity = Vector3.zero;
                     rb.angularVelocity = Vector3.zero;
+                    rb.interpolation = RigidbodyInterpolation.None;
                 }
                 
-                if (marioComponent.isActiveAndEnabled)
-                {
-                    marioComponent.Teleport(respawnPosition);
-                }
+                // Reactivate
+                gameObject.SetActive(true);
+                
+                // Teleport in SM64 after reactivation
+                StartCoroutine(TeleportAfterActivation(respawnPosition));
             }
             else
             {
                 transform.position = respawnPosition;
+                previousPosition = respawnPosition;
             }
             
-            previousPosition = respawnPosition;
             episodeStartTime = Time.time;
             lastRecordTime = 0f;
             
@@ -302,10 +326,41 @@ namespace ParkourRL.HybridSystem
                 dataRecorder.StartEpisode();
             }
             
-            // Validate position after respawn
-            StartCoroutine(ValidateRespawnPosition(respawnPosition));
+            Debug.Log($"[HybridPlayer] Player resetado em {respawnPosition}!");
+        }
+        
+        private System.Collections.IEnumerator TeleportAfterActivation(Vector3 position)
+        {
+            // Wait for activation to complete
+            yield return new WaitForFixedUpdate();
+            yield return null;
             
-            Debug.Log("[HybridPlayer] Player resetado!");
+            if (marioComponent != null && marioComponent.isActiveAndEnabled)
+            {
+                marioComponent.Teleport(position);
+                Debug.Log($"[HybridPlayer] Teleported to {position}");
+            }
+            
+            // Re-enable interpolation
+            Rigidbody rb = GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                rb.interpolation = RigidbodyInterpolation.Interpolate;
+            }
+            
+            // Validate after a few frames
+            yield return new WaitForFixedUpdate();
+            yield return new WaitForFixedUpdate();
+            
+            if (transform.position.y < position.y - 2f)
+            {
+                Debug.LogWarning($"[HybridPlayer] Mario fell after spawn! Repositioning...");
+                transform.position = position;
+                if (marioComponent != null && marioComponent.isActiveAndEnabled)
+                {
+                    marioComponent.Teleport(position);
+                }
+            }
         }
 
         private System.Collections.IEnumerator ValidateRespawnPosition(Vector3 expectedPosition)

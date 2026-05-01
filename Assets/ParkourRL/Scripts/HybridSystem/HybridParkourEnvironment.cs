@@ -36,6 +36,18 @@ namespace ParkourRL.HybridSystem
         [Header("Recording Components")]
         [SerializeField] private HybridDataRecorder dataRecorder;
         [SerializeField] private HybridTrainingManager trainingManager;
+        
+        [Header("Mode Settings")]
+        [Tooltip("Initial mode - can be changed at runtime via HybridTrainingManager")]
+        [SerializeField] private HybridMode initialMode = HybridMode.Recording;
+        
+        public enum HybridMode
+        {
+            Recording,    // Apenas 1 Mario (Player controlado)
+            Training    // 2 Marios lado a lado: RL (Azul) vs Offline RL/IL (Verde)
+        }
+        
+        public HybridMode CurrentMode { get; private set; }
 
         // References to Marios
         private GameObject playerMario;
@@ -53,25 +65,70 @@ namespace ParkourRL.HybridSystem
 
         void Start()
         {
+            // Set initial mode from inspector
+            CurrentMode = initialMode;
+            
             EnsureAllMeshColliders();
             InitializeSpawnPoints();
             
             StartCoroutine(RefreshTerrainAndSpawnMarios());
         }
+        
+        public void SetMode(HybridMode mode)
+        {
+            if (CurrentMode == mode) return;
+            
+            CurrentMode = mode;
+            Debug.Log($"[HybridEnv] Mode changed to: {mode}");
+            
+            // Recreate Marios for new mode
+            RecreateMariosForMode();
+        }
+        
+        private void RecreateMariosForMode()
+        {
+            // Destroy existing
+            if (playerMario != null)
+            {
+                Destroy(playerMario);
+                playerMario = null;
+                playerController = null;
+            }
+            if (aiMario != null)
+            {
+                Destroy(aiMario);
+                aiMario = null;
+                aiAgent = null;
+            }
+            
+            // Destroy old cameras
+            GameObject oldPlayerCam = GameObject.Find("PlayerCamera");
+            if (oldPlayerCam != null) Destroy(oldPlayerCam);
+            GameObject oldAICam = GameObject.Find("AICamera");
+            if (oldAICam != null) Destroy(oldAICam);
+            
+            // Respawn based on mode
+            StartCoroutine(RespawnAfterModeChange(CurrentMode == HybridMode.Recording));
+        }
 
         private IEnumerator RefreshTerrainAndSpawnMarios()
         {
-            // Wait for the physics cycle to ensure newly created colliders are ready.
+            // Wait multiple physics cycles to ensure colliders are ready
+            yield return new WaitForFixedUpdate();
             yield return new WaitForFixedUpdate();
             
             // Now reload terrain in SM64 with ALL platforms
+            Debug.Log("[HybridEnv] Refreshing static terrain...");
             SM64Context.RefreshStaticTerrain();
             
-            // Wait a frame for terrain to be properly loaded
-            yield return null;
+            // Wait for terrain to register in SM64
+            yield return new WaitForFixedUpdate();
+            yield return new WaitForFixedUpdate();
             
-            // Spawn both Marios
-            SpawnBothMarios();
+            Debug.Log("[HybridEnv] Terrain loaded, spawning Marios...");
+            
+            // Spawn Marios based on current mode
+            SpawnMariosBasedOnMode();
         }
 
         private void InitializeSpawnPoints()
@@ -80,27 +137,33 @@ namespace ParkourRL.HybridSystem
             if (playerSpawnPoint != null)
             {
                 currentPlayerSpawn = playerSpawnPoint.position;
+                Debug.Log($"[HybridEnv] Using playerSpawnPoint: {currentPlayerSpawn}");
             }
             else if (sharedSpawnPoints != null && sharedSpawnPoints.Length > 0 && sharedSpawnPoints[0] != null)
             {
                 currentPlayerSpawn = sharedSpawnPoints[0].position;
+                Debug.Log($"[HybridEnv] Using sharedSpawnPoints[0]: {currentPlayerSpawn}");
             }
             else
             {
                 currentPlayerSpawn = transform.position + Vector3.left * (marioSpacing / 2f);
+                Debug.LogWarning($"[HybridEnv] No player spawn point set! Using fallback: {currentPlayerSpawn}");
             }
             
             if (aiSpawnPoint != null)
             {
                 currentAISpawn = aiSpawnPoint.position;
+                Debug.Log($"[HybridEnv] Using aiSpawnPoint: {currentAISpawn}");
             }
             else if (sharedSpawnPoints != null && sharedSpawnPoints.Length > 1 && sharedSpawnPoints[1] != null)
             {
                 currentAISpawn = sharedSpawnPoints[1].position;
+                Debug.Log($"[HybridEnv] Using sharedSpawnPoints[1]: {currentAISpawn}");
             }
             else
             {
                 currentAISpawn = transform.position + Vector3.right * (marioSpacing / 2f);
+                Debug.LogWarning($"[HybridEnv] No AI spawn point set! Using fallback: {currentAISpawn}");
             }
         }
 
@@ -122,12 +185,41 @@ namespace ParkourRL.HybridSystem
             }
         }
 
-        private void SpawnBothMarios()
+        private void SpawnMariosBasedOnMode()
         {
-            SpawnPlayerMario();
-            SpawnAIMario();
+            // Use the mode set in the inspector (CurrentMode) - it has priority
+            bool isRecording = CurrentMode == HybridMode.Recording;
             
-            Debug.Log("[HybridEnv] Ambos os Marios spawnados!");
+            // Sync trainingManager TO this environment (not the other way around)
+            // This ensures the inspector choice in HybridParkourEnvironment is respected
+            if (trainingManager != null)
+            {
+                bool envIsRecording = CurrentMode == HybridMode.Recording;
+                bool managerIsRecording = trainingManager.CurrentMode == HybridTrainingManager.HybridMode.Recording;
+                
+                if (envIsRecording != managerIsRecording)
+                {
+                    // Force trainingManager to match this environment's mode
+                    Debug.Log($"[HybridEnv] Syncing TrainingManager to Environment mode: {CurrentMode}");
+                    trainingManager.SetMode(envIsRecording ? HybridTrainingManager.HybridMode.Recording : HybridTrainingManager.HybridMode.Training);
+                }
+            }
+            
+            if (isRecording)
+            {
+                // Recording mode: Only Player Mario
+                SpawnPlayerMario();
+                Debug.Log("[HybridEnv] Recording mode: Only Player Mario spawned (Player-controlled)");
+            }
+            else
+            {
+                // Training mode: Both Marios for comparison
+                // Mario 1: RL (Blue) - Training with PPO/SAC
+                // Mario 2: Offline RL/IL (Green) - Training with recorded data
+                SpawnPlayerMario();  // Green = Offline RL/IL
+                SpawnAIMario();    // Blue = Online RL
+                Debug.Log("[HybridEnv] Training mode: Both Marios spawned - Green (Offline RL/IL) vs Blue (Online RL)");
+            }
         }
 
         private void SpawnPlayerMario()
@@ -136,6 +228,15 @@ namespace ParkourRL.HybridSystem
             if (playerMario != null)
             {
                 Destroy(playerMario);
+                playerMario = null;
+                playerController = null;
+            }
+            
+            // Destruir câmera antiga do player se existir
+            GameObject oldCam = GameObject.Find("PlayerCamera");
+            if (oldCam != null)
+            {
+                Destroy(oldCam);
             }
             
             // Criar Mario player
@@ -180,15 +281,22 @@ namespace ParkourRL.HybridSystem
             GameObject camObj = new GameObject("PlayerCamera");
             Camera cam = camObj.AddComponent<Camera>();
             cam.rect = new Rect(0, 0, 0.5f, 1);  // Metade esquerda da tela
+            // Determine camera mode
+            bool isRecording = false;
+            if (trainingManager != null)
+            {
+                isRecording = trainingManager.CurrentMode == HybridTrainingManager.HybridMode.Recording;
+            }
+            
+            // Recording = full screen, Training = left half
+            cam.rect = isRecording ? new Rect(0, 0, 1, 1) : new Rect(0, 0, 0.5f, 1);
             playerController.SetCamera(cam);
             
             // Ensure terrain is loaded before activating Mario
             SM64Context.RefreshStaticTerrain();
             
-            playerMario.SetActive(true);
-            
-            // Immediately teleport Mario to ensure correct position in SM64 physics
-            sm64Mario.Teleport(currentPlayerSpawn + Vector3.up * 2f);
+            // Wait a frame for terrain to register
+            StartCoroutine(ActivateMarioAfterTerrain(playerMario, sm64Mario, currentPlayerSpawn + Vector3.up * 2f));
             
             // Always connect dataRecorder to playerController (used when mode switches to Recording)
             if (dataRecorder != null)
@@ -210,6 +318,15 @@ namespace ParkourRL.HybridSystem
             if (aiMario != null)
             {
                 Destroy(aiMario);
+                aiMario = null;
+                aiAgent = null;
+            }
+            
+            // Destruir câmera antiga do AI se existir
+            GameObject oldCam = GameObject.Find("AICamera");
+            if (oldCam != null)
+            {
+                Destroy(oldCam);
             }
             
             // Criar Mario AI
@@ -275,7 +392,7 @@ namespace ParkourRL.HybridSystem
             var decisionRequester = aiMario.AddComponent<Unity.MLAgents.DecisionRequester>();
             decisionRequester.DecisionPeriod = 2;
             
-            // Camera for the AI (view-only)
+            // Camera for the AI (view-only) - only in Training mode
             GameObject camObj = new GameObject("AICamera");
             Camera cam = camObj.AddComponent<Camera>();
             cam.rect = new Rect(0.5f, 0, 0.5f, 1);  // Metade direita da tela
@@ -283,10 +400,8 @@ namespace ParkourRL.HybridSystem
             // Ensure terrain is loaded before activating Mario
             SM64Context.RefreshStaticTerrain();
             
-            aiMario.SetActive(true);
-            
-            // Immediately teleport Mario to ensure correct position in SM64 physics
-            sm64Mario.Teleport(currentAISpawn + Vector3.up * 2f);
+            // Wait a frame for terrain to register
+            StartCoroutine(ActivateMarioAfterTerrain(aiMario, sm64Mario, currentAISpawn + Vector3.up * 2f));
             
             // Sincronizar modo
             if (trainingManager != null)
@@ -299,17 +414,98 @@ namespace ParkourRL.HybridSystem
             Debug.Log($"[HybridEnv] AI Mario spawned at {aiMario.transform.position}");
         }
 
+        private IEnumerator ActivateMarioAfterTerrain(GameObject mario, SM64Mario sm64Component, Vector3 spawnPosition)
+        {
+            Debug.Log($"[HybridEnv] Activating Mario at spawn position: {spawnPosition}");
+            
+            // Wait multiple physics updates so terrain is fully registered
+            yield return new WaitForFixedUpdate();
+            yield return new WaitForFixedUpdate();
+            
+            if (mario == null) 
+            {
+                Debug.LogError("[HybridEnv] Mario GameObject is null before activation!");
+                yield break;
+            }
+            
+            // Reset position one more time before activation
+            mario.transform.position = spawnPosition;
+            
+            // Now activate
+            mario.SetActive(true);
+            
+            // Wait for SM64 to initialize
+            yield return new WaitForFixedUpdate();
+            yield return null;
+            
+            if (mario == null) yield break;
+            
+            // Teleport to ensure correct position in SM64 physics
+            if (sm64Component != null && sm64Component.isActiveAndEnabled)
+            {
+                sm64Component.Teleport(spawnPosition);
+                Debug.Log($"[HybridEnv] Teleported Mario to {spawnPosition}");
+            }
+            
+            // Validate position after spawn
+            yield return new WaitForFixedUpdate();
+            yield return new WaitForFixedUpdate();
+            
+            if (mario == null) yield break;
+            
+            Vector3 currentPos = mario.transform.position;
+            float heightDiff = currentPos.y - spawnPosition.y;
+            
+            if (heightDiff < -1.0f || currentPos.y < -5f)
+            {
+                Debug.LogWarning($"[HybridEnv] Mario spawned below expected position! Expected Y={spawnPosition.y}, Actual Y={currentPos.y}. Repositioning...");
+                
+                // Hard reset - deactivate, reposition, reactivate
+                mario.SetActive(false);
+                yield return null;
+                mario.transform.position = spawnPosition;
+                yield return new WaitForFixedUpdate();
+                mario.SetActive(true);
+                yield return new WaitForFixedUpdate();
+                
+                if (sm64Component != null && sm64Component.isActiveAndEnabled)
+                {
+                    sm64Component.Teleport(spawnPosition);
+                }
+                
+                // Check again
+                yield return new WaitForFixedUpdate();
+                currentPos = mario.transform.position;
+                if (currentPos.y < spawnPosition.y - 1.0f)
+                {
+                    Debug.LogError($"[HybridEnv] Failed to properly spawn Mario! Final position: {currentPos}");
+                }
+            }
+            else
+            {
+                Debug.Log($"[HybridEnv] Mario activated successfully at {currentPos}");
+            }
+        }
+
         public void ResetEnvironment()
         {
-            // Respawn both - ONLY reset positions, DO NOT call EndEpisode/OnEpisodeBegin
+            // Determine if we're in recording mode
+            bool isRecording = false;
+            if (trainingManager != null)
+            {
+                isRecording = trainingManager.CurrentMode == HybridTrainingManager.HybridMode.Recording;
+            }
+            
+            // In recording mode, only respawn player
+            // In training mode, respawn both
             if (playerMario != null && playerController != null)
             {
                 playerController.ResetPlayer();
             }
             
-            if (aiMario != null && aiAgent != null)
+            if (!isRecording && aiMario != null && aiAgent != null)
             {
-                // Reset AI Mario with proper teleport
+                // Reset AI Mario with proper teleport (only in training mode)
                 Vector3 respawnPosition = GetCurrentSpawnPoint() + Vector3.up * 2f;
                 
                 aiMario.transform.position = respawnPosition;
@@ -333,6 +529,13 @@ namespace ParkourRL.HybridSystem
                 StartCoroutine(ValidateRespawnPosition(aiMario, respawnPosition));
                 
                 // DO NOT call EndEpisode() here - causes infinite recursion!
+            }
+            else if (isRecording && aiMario != null)
+            {
+                // In recording mode, destroy AI mario if it exists
+                Destroy(aiMario);
+                aiMario = null;
+                aiAgent = null;
             }
         }
 
@@ -400,15 +603,19 @@ namespace ParkourRL.HybridSystem
         {
             Debug.Log($"[HybridEnv] SetMode called: {mode}");
             
+            // When switching modes, we need to recreate the Marios
+            // because the number of Marios differs between modes
+            bool isRecording = mode == HybridTrainingManager.HybridMode.Recording;
+            
             if (aiAgent != null)
             {
-                aiAgent.SetMode(mode == HybridTrainingManager.HybridMode.Recording 
+                aiAgent.SetMode(isRecording 
                     ? MarioHybridAgent.HybridMode.Recording 
                     : MarioHybridAgent.HybridMode.Training);
             }
             
             // Ensure dataRecorder is connected to player when in Recording mode
-            if (playerController != null && mode == HybridTrainingManager.HybridMode.Recording)
+            if (playerController != null && isRecording)
             {
                 if (dataRecorder != null)
                 {
@@ -417,8 +624,46 @@ namespace ParkourRL.HybridSystem
                 }
             }
             
-            // Recreate Marios to apply changes
-            ResetEnvironment();
+            // Recreate Marios to apply mode change (1 mario for Recording, 2 for Training)
+            // Destroy existing first
+            if (playerMario != null)
+            {
+                Destroy(playerMario);
+                playerMario = null;
+                playerController = null;
+            }
+            if (aiMario != null)
+            {
+                Destroy(aiMario);
+                aiMario = null;
+                aiAgent = null;
+            }
+            
+            // Respawn based on new mode
+            StartCoroutine(RespawnAfterModeChange(isRecording));
+        }
+        
+        private IEnumerator RespawnAfterModeChange(bool isRecording)
+        {
+            // Wait for destruction to complete
+            yield return null;
+            
+            // Refresh terrain
+            SM64Context.RefreshStaticTerrain();
+            yield return new WaitForFixedUpdate();
+            
+            if (isRecording)
+            {
+                SpawnPlayerMario();
+                Debug.Log("[HybridEnv] Mode changed to Recording: 1 Mario spawned");
+            }
+            else
+            {
+                SpawnPlayerMario();
+                yield return new WaitForSeconds(0.1f); // Small delay between spawns
+                SpawnAIMario();
+                Debug.Log("[HybridEnv] Mode changed to Training: 2 Marios spawned");
+            }
         }
 
         void OnGUI()
