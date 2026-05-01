@@ -80,6 +80,12 @@ namespace ParkourRL.HybridSystem
             episodeCompleted = false;
             currentTransitions.Clear();
             
+            // Start recording episode in data recorder
+            if (dataRecorder != null)
+            {
+                dataRecorder.StartEpisode();
+            }
+            
             Debug.Log("[HybridPlayer] Player Mario started. Use WASD + Space.");
         }
 
@@ -131,26 +137,10 @@ namespace ParkourRL.HybridSystem
             
             float episodeTime = Time.time - episodeStartTime;
             
-            // Salvar dados finais
+            // Finalize episode in recorder
             if (dataRecorder != null)
             {
-                dataRecorder.StartEpisode();
-                
-                // Convert and save all transitions
-                foreach (var trans in currentTransitions)
-                {
-                    dataRecorder.RecordStep(
-                        trans.observations,
-                        trans.actions,
-                        trans.reward,
-                        trans.observations,  // next_obs = obs atual (simplificado)
-                        trans.done
-                    );
-                }
-                
-                // Finalize episode in recorder
-                var dummyTransitions = new MarioHybridAgent.HybridTransition[0];
-                dataRecorder.SaveEpisode(dummyTransitions, success);
+                dataRecorder.SaveEpisode(success);
             }
             
             // Notify environment
@@ -167,8 +157,9 @@ namespace ParkourRL.HybridSystem
 
         private void RecordTransition()
         {
+            if (dataRecorder == null) return;
+            
             Vector3 position = transform.position;
-            Vector3 velocity = (position - previousPosition) / Mathf.Max(Time.deltaTime, 0.001f);
             
             // Collect observations (same format as agent)
             float[] observations = CollectObservations();
@@ -184,22 +175,14 @@ namespace ParkourRL.HybridSystem
             // Calculate reward (approximation)
             float reward = CalculateReward();
             
-            var transition = new HybridTransition
-            {
-                observations = observations,
-                actions = actions,
-                reward = reward,
-                done = false,
-                timestamp = Time.time
-            };
-            
-            currentTransitions.Add(transition);
-            
-            // Limitar tamanho
-            if (currentTransitions.Count > 2000)
-            {
-                currentTransitions.RemoveAt(0);
-            }
+            // Record directly to data recorder
+            dataRecorder.RecordStep(
+                observations,
+                actions,
+                reward,
+                observations,  // next_obs = obs atual (será atualizado no próximo step)
+                false
+            );
             
             previousPosition = position;
         }
@@ -278,27 +261,77 @@ namespace ParkourRL.HybridSystem
             return -0.01f;
         }
 
-        public void ResetPlayer()
+            public void ResetPlayer()
         {
             episodeCompleted = false;
             isRecording = true;
             currentTransitions.Clear();
             
+            Vector3 respawnPosition = startPosition + Vector3.up * 2f;
+            
             // Teleportar
             if (marioComponent != null)
             {
-                marioComponent.Teleport(startPosition);
+                transform.position = respawnPosition;
+                
+                // Reset rigidbody velocity
+                Rigidbody rb = GetComponent<Rigidbody>();
+                if (rb != null)
+                {
+                    rb.velocity = Vector3.zero;
+                    rb.angularVelocity = Vector3.zero;
+                }
+                
+                if (marioComponent.isActiveAndEnabled)
+                {
+                    marioComponent.Teleport(respawnPosition);
+                }
             }
             else
             {
-                transform.position = startPosition;
+                transform.position = respawnPosition;
             }
             
-            previousPosition = startPosition;
+            previousPosition = respawnPosition;
             episodeStartTime = Time.time;
             lastRecordTime = 0f;
             
+            // Start new episode recording
+            if (dataRecorder != null)
+            {
+                dataRecorder.StartEpisode();
+            }
+            
+            // Validate position after respawn
+            StartCoroutine(ValidateRespawnPosition(respawnPosition));
+            
             Debug.Log("[HybridPlayer] Player resetado!");
+        }
+
+        private System.Collections.IEnumerator ValidateRespawnPosition(Vector3 expectedPosition)
+        {
+            yield return new WaitForFixedUpdate();
+
+            if (this == null || transform == null)
+                yield break;
+
+            Vector3 marioPos = transform.position;
+            float horizontalDistance = Vector3.Distance(
+                new Vector3(marioPos.x, 0f, marioPos.z),
+                new Vector3(expectedPosition.x, 0f, expectedPosition.z)
+            );
+
+            bool invalidRespawn = horizontalDistance > 1.5f || marioPos.y < (expectedPosition.y - 1.0f);
+            if (!invalidRespawn)
+                yield break;
+
+            Debug.LogWarning($"[HybridPlayer] Inconsistent respawn detected. Forcing repositioning. Esperado={expectedPosition} Atual={marioPos}");
+
+            transform.position = expectedPosition;
+            if (marioComponent != null && marioComponent.isActiveAndEnabled)
+            {
+                marioComponent.Teleport(expectedPosition);
+            }
         }
 
         public void SetEnvironment(HybridParkourEnvironment env)

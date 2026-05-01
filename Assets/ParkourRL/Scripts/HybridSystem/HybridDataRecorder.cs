@@ -59,27 +59,51 @@ namespace ParkourRL.HybridSystem
 
         private void InitializeDirectory()
         {
-            string path = Path.Combine(Application.dataPath, "..", outputDirectory);
-            if (!Directory.Exists(path))
+            string path = Path.GetFullPath(Path.Combine(Application.dataPath, "..", outputDirectory));
+            Debug.Log($"[HybridRecorder] Initializing directory at: {path}");
+            
+            try
             {
-                Directory.CreateDirectory(path);
-                Debug.Log($"[HybridRecorder] Directory created: {path}");
+                if (!Directory.Exists(path))
+                {
+                    Directory.CreateDirectory(path);
+                    Debug.Log($"[HybridRecorder] Directory created: {path}");
+                }
+                else
+                {
+                    Debug.Log($"[HybridRecorder] Directory already exists: {path}");
+                }
+                
+                // Test write permissions
+                string testFile = Path.Combine(path, "test_write.tmp");
+                File.WriteAllText(testFile, "test");
+                File.Delete(testFile);
+                Debug.Log("[HybridRecorder] Write permissions OK");
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[HybridRecorder] Failed to initialize directory: {e.Message}");
             }
             
             currentFilePath = GetNextFilePath();
+            Debug.Log($"[HybridRecorder] Current file path: {currentFilePath}");
         }
 
         private string GetNextFilePath()
         {
             string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
             string fileNameWithCounter = $"{fileName}_{timestamp}_batch{fileCounter}";
-            return Path.Combine(Application.dataPath, "..", outputDirectory, fileNameWithCounter);
+            string path = Path.GetFullPath(Path.Combine(Application.dataPath, "..", outputDirectory, fileNameWithCounter));
+            return path;
         }
 
         public void StartEpisode()
         {
-            if (Time.time - lastRecordTime < minRecordInterval)
+            if (currentEpisode != null && isRecording)
+            {
+                Debug.LogWarning("[HybridRecorder] StartEpisode called but episode already in progress. Skipping.");
                 return;
+            }
             
             isRecording = true;
             currentEpisode = new EpisodeData
@@ -125,13 +149,13 @@ namespace ParkourRL.HybridSystem
         public void SaveEpisode(MarioHybridAgent.HybridTransition[] transitions, bool success)
         {
             if (currentEpisode == null) return;
-            
+
             currentEpisode.endTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
             currentEpisode.duration = Time.time - currentEpisode.startTimestamp;
             currentEpisode.success = success;
             currentEpisode.totalReward = CalculateTotalReward(transitions);
             currentEpisode.stepCount = transitions.Length;
-            
+
             // Converter transitions
             foreach (var t in transitions)
             {
@@ -146,24 +170,54 @@ namespace ParkourRL.HybridSystem
                 };
                 currentEpisode.transitions.Add(trans);
             }
-            
+
+            FinalizeEpisode(success);
+        }
+
+        public void SaveEpisode(bool success)
+        {
+            if (currentEpisode == null) return;
+
+            currentEpisode.endTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+            currentEpisode.duration = Time.time - currentEpisode.startTimestamp;
+            currentEpisode.success = success;
+            currentEpisode.totalReward = CalculateTotalRewardFromEpisode();
+            currentEpisode.stepCount = currentEpisode.transitions.Count;
+
+            FinalizeEpisode(success);
+        }
+
+        private void FinalizeEpisode(bool success)
+        {
             episodeBatch.Add(currentEpisode);
-            episodeCounter++;
-            
+
             Debug.Log($"[HybridRecorder] Episode {currentEpisode.episodeId} saved. " +
                      $"Success={success}, Steps={currentEpisode.stepCount}, " +
                      $"Reward={currentEpisode.totalReward:F2}");
-            
+
             OnEpisodeEnded?.Invoke(success);
-            
+
             // Salvar batch se atingiu limite
             if (episodeBatch.Count >= maxEpisodesPerFile)
             {
                 FlushBatch();
             }
-            
+
+            episodeCounter++;
             isRecording = false;
             currentEpisode = null;
+        }
+
+        private float CalculateTotalRewardFromEpisode()
+        {
+            if (currentEpisode == null || currentEpisode.transitions == null) return 0f;
+
+            float total = 0f;
+            foreach (var t in currentEpisode.transitions)
+            {
+                total += t.reward;
+            }
+            return total;
         }
 
         private float CalculateTotalReward(MarioHybridAgent.HybridTransition[] transitions)
@@ -178,24 +232,32 @@ namespace ParkourRL.HybridSystem
 
         public void FlushBatch()
         {
-            if (episodeBatch.Count == 0) return;
+            if (episodeBatch.Count == 0) 
+            {
+                Debug.Log("[HybridRecorder] FlushBatch called but no episodes to save");
+                return;
+            }
             
             string jsonPath = currentFilePath + ".json";
             string csvPath = currentFilePath + ".csv";
+            
+            Debug.Log($"[HybridRecorder] Saving batch with {episodeBatch.Count} episodes to: {currentFilePath}");
             
             try
             {
                 if (outputFormat == OutputFormat.JSON || outputFormat == OutputFormat.Both)
                 {
                     SaveAsJSON(jsonPath);
+                    Debug.Log($"[HybridRecorder] JSON saved: {jsonPath}");
                 }
                 
                 if (outputFormat == OutputFormat.CSV || outputFormat == OutputFormat.Both)
                 {
                     SaveAsCSV(csvPath);
+                    Debug.Log($"[HybridRecorder] CSV saved: {csvPath}");
                 }
                 
-                Debug.Log($"[HybridRecorder] Batch saved: {episodeBatch.Count} episodes");
+                Debug.Log($"[HybridRecorder] Batch saved successfully: {episodeBatch.Count} episodes");
                 OnDataSaved?.Invoke(currentFilePath);
                 
                 // Preparar next batch
@@ -205,7 +267,7 @@ namespace ParkourRL.HybridSystem
             }
             catch (Exception e)
             {
-                Debug.LogError($"[HybridRecorder] Error ao salvar: {e.Message}");
+                Debug.LogError($"[HybridRecorder] Error ao salvar: {e.Message}\n{e.StackTrace}");
             }
         }
 

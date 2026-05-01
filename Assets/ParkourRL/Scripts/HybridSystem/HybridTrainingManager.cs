@@ -133,8 +133,13 @@ namespace ParkourRL.HybridSystem
                 else
                 {
                     // Finalize pending recording
+                    Debug.Log("[HybridManager] Recording DEACTIVATED - Saving data...");
                     dataRecorder.FlushBatch();
                 }
+            }
+            else
+            {
+                Debug.LogWarning("[HybridManager] DataRecorder is null! Cannot record data.");
             }
             
             // Atualizar UI
@@ -202,17 +207,38 @@ namespace ParkourRL.HybridSystem
                 }
             }
             
+            // Save button
+            if (GUI.Button(new Rect(Screen.width - 110, Screen.height - 120, 100, 30), "Save Data"))
+            {
+                ForceSaveData();
+            }
+            
             // Instructions
             GUI.Label(new Rect(10, Screen.height - 30, 400, 20), 
-                "M: Toggle Mode | P: Pause | WASD+Space: Control Player");
+                "M: Toggle Mode | P: Pause | WASD+Space: Control Player | Click 'Save Data' to save");
         }
 
         void OnDestroy()
         {
             // Ensure data is saved
-            if (dataRecorder != null && currentMode == HybridMode.Recording)
+            if (dataRecorder != null)
             {
+                Debug.Log("[HybridManager] OnDestroy - Saving any pending data...");
                 dataRecorder.FlushBatch();
+            }
+        }
+
+        // Manual save method for testing
+        public void ForceSaveData()
+        {
+            if (dataRecorder != null)
+            {
+                Debug.Log("[HybridManager] Force saving data...");
+                dataRecorder.FlushBatch();
+            }
+            else
+            {
+                Debug.LogWarning("[HybridManager] Cannot save - DataRecorder is null!");
             }
         }
     }
