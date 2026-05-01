@@ -51,31 +51,19 @@ namespace ParkourRL
         void Awake()
         {
             teamColors = new Color[] { ppoColor, sacColor, dqnColor };
+            SetupScoreboard();
         }
 
         void Start()
         {
-            EnsureAllMeshColliders();
-            SetupScoreboard();
-            StartCoroutine(InitTerrainAndSpawn());
-        }
-
-        private IEnumerator InitTerrainAndSpawn()
-        {
-            // Wait 1 physics cycle to ensure MeshColliders are ready
-            yield return new WaitForFixedUpdate();
-            
-            // Ensure all terrains have MeshColliders
+            // Garantir MeshColliders
             EnsureAllMeshColliders();
 
-            // Reload SM64 terrain
+            // Recarregar terreno SM64
             SM64Context.RefreshStaticTerrain();
-            Debug.Log("[CompetitiveEnv] SM64 terrain reloaded.");
 
-            yield return new WaitForFixedUpdate();
-
-            // Spawn all Marios
-            SpawnAllMarios();
+            // Spawnar todos os Marios
+            Invoke(nameof(SpawnAllMarios), 0.5f);
         }
 
         private void SetupScoreboard()
@@ -226,9 +214,7 @@ namespace ParkourRL
         {
             if (spawnPoints != null && index >= 0 && index < spawnPoints.Length && spawnPoints[index] != null)
             {
-                Vector3 pos = spawnPoints[index].position;
-                Debug.Log($"[SpawnDebug] SpawnPoint[{index}] position: {pos} (name: {spawnPoints[index].name})");
-                return pos;
+                return spawnPoints[index].position;
             }
 
             if (spawnPoints != null && spawnPoints.Length > 0 && spawnPoints[0] != null)
@@ -236,7 +222,7 @@ namespace ParkourRL
                 return spawnPoints[0].position + Vector3.right * (index * 2f);
             }
 
-            return Vector3.up * 2f + Vector3.right * (index * 2f);
+            return Vector3.right * (index * 2f);
         }
 
         private void SpawnMario(int index, Vector3 spawnPos, Color teamColor, Material runtimeMat)
@@ -281,17 +267,6 @@ namespace ParkourRL
                     materialField.SetValue(sm64Mario, runtimeMat);
             }
 
-            // 5.5. Collider matching Mario's mesh for Unity collision
-            var capsule = marioObj.AddComponent<CapsuleCollider>();
-            capsule.center = new Vector3(0, 0.5f, 0);
-            capsule.radius = 0.3f;
-            capsule.height = 1.0f;
-            capsule.isTrigger = false;
-
-            var rb = marioObj.AddComponent<Rigidbody>();
-            rb.isKinematic = true; // SM64 controls position, not Unity physics
-            rb.useGravity = false;
-
             // Configure agent properties
             agent.teamId = index;
             agent.teamColor = teamColor;
@@ -301,19 +276,6 @@ namespace ParkourRL
             
             // Ativa o objeto apenas após todos os componentes estarem configurados
             marioObj.SetActive(true);
-            
-            // 8. Teleport to ensure correct position on SM64 terrain (after 1 frame)
-            StartCoroutine(TeleportMarioNextFrame(sm64Mario, spawnPos));
-        }
-
-        private System.Collections.IEnumerator TeleportMarioNextFrame(SM64Mario sm64Mario, Vector3 pos)
-        {
-            yield return null; // Wait 1 frame
-            if (sm64Mario != null && sm64Mario.isActiveAndEnabled)
-            {
-                sm64Mario.Teleport(pos);
-                Debug.Log($"[CompetitiveEnv] Mario teleported to {pos}");
-            }
         }
 
         public int RegisterFinish(MarioCompetitiveAgent agent)
@@ -360,16 +322,29 @@ namespace ParkourRL
         public void RespawnAgent(MarioCompetitiveAgent agent)
         {
             int idx = agents.IndexOf(agent);
-            Vector3 spawnPos = GetSpawnPositionForIndex(idx >= 0 ? idx : 0);
+            Vector3 spawnPos;
+
+            if (spawnPoints != null && idx < spawnPoints.Length && idx >= 0 && spawnPoints[idx] != null)
+            {
+                spawnPos = spawnPoints[idx].position + Vector3.up * 1f;
+            }
+            else if (spawnPoints != null && spawnPoints.Length > 0 && spawnPoints[0] != null)
+            {
+                spawnPos = spawnPoints[0].position + Vector3.up * 1f + Vector3.right * (idx * 2f);
+            }
+            else
+            {
+                spawnPos = Vector3.up * 2f + Vector3.right * (idx * 2f);
+            }
 
             SM64Mario sm64Mario = agent.GetComponent<SM64Mario>();
             if (sm64Mario != null)
             {
-                sm64Mario.Teleport(spawnPos);
+                sm64Mario.Teleport(spawnPos + Vector3.up * 1f);
             }
             else
             {
-                agent.transform.position = spawnPos;
+                agent.transform.position = spawnPos + Vector3.up * 1f;
             }
         }
 

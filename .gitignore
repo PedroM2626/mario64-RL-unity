@@ -83,3 +83,5 @@ desktop.ini
 # Sensitive ROMs
 *.z64
 *.z64.meta
+
+backup64*

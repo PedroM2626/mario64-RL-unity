@@ -36,29 +36,27 @@ namespace LibSM64
             var initPos = transform.position;
             marioId = Interop.MarioCreate( new Vector3( -initPos.x, initPos.y, initPos.z ) * Interop.SCALE_FACTOR );
 
-            states = new Interop.SM64MarioState[2] {
-                new Interop.SM64MarioState(),
-                new Interop.SM64MarioState()
-            };
-
             inputProvider = GetComponent<SM64InputProvider>();
             if( inputProvider == null )
             {
-                Debug.LogError("[SM64Mario] InputProvider not found!");
-                enabled = false;
-                return;
+                Debug.LogError("[SM64Mario] InputProvider não encontrado!");
+                throw new System.Exception("Need to add an input provider component to Mario");
             }
             if (inputProvider.GetType().Name != "MarioInputProvider")
             {
-                Debug.LogWarning($"[SM64Mario] InputProvider is {inputProvider.GetType().Name}, expected: MarioInputProvider");
+                Debug.LogWarning($"[SM64Mario] InputProvider é {inputProvider.GetType().Name}, esperado: MarioInputProvider");
             }
 
             marioRendererObject = new GameObject("MARIO");
             marioRendererObject.hideFlags |= HideFlags.HideInHierarchy;
-            marioRendererObject.transform.SetParent(transform, false);
             
             var renderer = marioRendererObject.AddComponent<MeshRenderer>();
             var meshFilter = marioRendererObject.AddComponent<MeshFilter>();
+
+            states = new Interop.SM64MarioState[2] {
+                new Interop.SM64MarioState(),
+                new Interop.SM64MarioState()
+            };
 
             if (material != null)
             {
@@ -108,39 +106,26 @@ namespace LibSM64
 
         public void Teleport(Vector3 newPos)
         {
-            // Updates the initial position instantly visually
-            transform.position = newPos;
-
-            // During creation/deactivation, there is no valid native state for full teleportation yet.
-            if (!isActiveAndEnabled || !Interop.isGlobalInit)
-                return;
-
-            if (states == null || states.Length < 2)
-            {
-                states = new Interop.SM64MarioState[2] {
-                    new Interop.SM64MarioState(),
-                    new Interop.SM64MarioState()
-                };
-            }
-
-            // Deletes the old native instance (if it exists)
-            if (marioId != 0)
-            {
+            // Apaga a instância nativa velha
+            if( Interop.isGlobalInit ) {
                 Interop.MarioDelete(marioId);
             }
-
-            // Recreates the native instance at the new position
+            
+            // Recria a instância nativa na nova posição
             marioId = Interop.MarioCreate( new Vector3( -newPos.x, newPos.y, newPos.z ) * Interop.SCALE_FACTOR );
 
-            // Clears transition states
+            // Limpa os estados de transição
             states[0] = new Interop.SM64MarioState();
             states[1] = new Interop.SM64MarioState();
             buffIndex = 0;
+            
+            // Atualiza a posição inicial instantaneamente visualmente
+            transform.position = newPos;
         }
 
         public void contextFixedUpdate()
         {
-            // Null protection during lifecycle
+            // Proteção contra null durante ciclo de vida
             if (inputProvider == null || states == null || positionBuffers == null)
                 return;
                 
@@ -148,7 +133,7 @@ namespace LibSM64
             var look = inputProvider.GetCameraLookDirection();
             var joystick = inputProvider.GetJoystickAxes();
             
-            // Debug: only log when there is significant input (avoids flood)
+            // Debug: logar apenas quando há input significativo (evita flood)
             if (joystick.magnitude > 0.1f && Time.frameCount % 60 == 0)
             {
                 Debug.Log($"[SM64Mario] Input ativo - Joystick: {joystick}");
@@ -179,7 +164,7 @@ namespace LibSM64
 
         public void contextUpdate()
         {
-            // Null protection during lifecycle
+            // Proteção contra null durante ciclo de vida
             if (lerpPositionBuffer == null || states == null)
                 return;
                 
@@ -197,12 +182,12 @@ namespace LibSM64
             marioMesh.vertices = lerpPositionBuffer;
             marioMesh.normals = lerpNormalBuffer;
             
-            // Colors and UVs updates stay in the visual Update to avoid TLS Allocator overflow in Unity ML-Agents (high TimeScale)
+            // As atualizações de Colors e UVs ficam no Update visual para não estourar o TLS Allocator no Unity ML-Agents (TimeScale alto)
             marioMesh.colors = colorBufferColors;
             marioMesh.uv = uvBuffer;
 
             marioMesh.RecalculateBounds();
-            // marioMesh.RecalculateTangents(); // Disabled to avoid ALLOC_TEMP_MAIN leaks (Unnecessary without Normal Map)
+            // marioMesh.RecalculateTangents(); // Desabilitado para evitar vazamentos ALLOC_TEMP_MAIN (Desnecessário sem Normal Map)
         }
 
         void OnDrawGizmos()
