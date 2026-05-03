@@ -396,6 +396,10 @@ class DreamerAgent:
         h = self.h.repeat(batch_size, 1)
         z = self.z.repeat(batch_size, 1)
         
+        # Salvar estado inicial para recalcular no actor (grafo separado)
+        h_init = h.clone()
+        z_init = z.clone()
+        
         # Imagine trajectories
         states_h = [h]
         states_z = [z]
@@ -404,45 +408,67 @@ class DreamerAgent:
         values = []
         
         for t in range(horizon):
-            # Sample action
-            action_cont, action_disc = self.actor.sample(h, z, deterministic=False)
+            # Sample action (com gradiente para treinamento do actor)
+            with torch.no_grad():
+                action_cont, action_disc = self.actor.sample(h, z, deterministic=False)
             action = torch.cat([action_cont, action_disc], dim=-1)
             
             # Imagine next state
             h, z, _, _ = self.rssm.imagine(h, z, action)
             
             # Predict reward and value
-            reward = self.reward_pred(h, z)
-            value = self.critic(h, z)
+            with torch.no_grad():
+                reward = self.reward_pred(h, z)
+                value = self.critic(h, z)
             
-            states_h.append(h)
-            states_z.append(z)
-            actions_list.append(action)
+            states_h.append(h.detach())
+            states_z.append(z.detach())
+            actions_list.append(action.detach())
             rewards_pred.append(reward)
             values.append(value)
         
         # Compute returns (TD-lambda)
         returns = self._compute_returns(rewards_pred, values)
         
-        # Critic loss
+        # ========== Treinar Critic ==========
         values_stacked = torch.stack(values, dim=1).squeeze(-1)
-        critic_loss = F.mse_loss(values_stacked, returns.detach())
+        returns_detached = returns.detach()
+        critic_loss = F.mse_loss(values_stacked, returns_detached)
         
-        # Actor loss (advantage weighted) - usar .detach() para evitar backward duplo
-        advantages = (returns - values_stacked).detach()
-        actor_loss = -(advantages * torch.stack(rewards_pred, dim=1).detach().squeeze(-1)).mean()
-        
-        # Update critic
         self.critic_optimizer.zero_grad()
-        critic_loss.backward(retain_graph=False)
+        critic_loss.backward()
         torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 100.0)
         self.critic_optimizer.step()
         
-        # Update actor (não reter grafo após backward)
-        self.actor_optimizer.zero_grad()
-        actor_loss.backward(retain_graph=False)
-        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 100.0)
-        self.actor_optimizer.step()
+        # ========== Treinar Actor (grafo completamente separado) ==========
+        # Recalcular TUDO a partir do estado inicial para ter um grafo fresco
+        # Usar .detach() no início para criar um novo grafo independente
+        h_actor = h_init.detach().requires_grad_(True)
+        z_actor = z_init.detach().requires_grad_(True)
+        actor_losses = []
+        
+        for t in range(horizon):
+            # Sample action do actor (com gradiente)
+            action_cont, action_disc = self.actor.sample(h_actor, z_actor, deterministic=False)
+            action_new = torch.cat([action_cont, action_disc], dim=-1)
+            
+            # Imagine next state (RSSM deve retornar tensores com gradiente)
+            h_actor, z_actor, _, _ = self.rssm.imagine(h_actor, z_actor, action_new)
+            
+            # Predict reward
+            reward_pred = self.reward_pred(h_actor, z_actor)
+            actor_losses.append(-reward_pred.squeeze())  # Negativo porque queremos maximizar
+        
+        actor_loss = torch.stack(actor_losses).mean()
+        
+        # Verificar se tem gradiente antes de fazer backward
+        if actor_loss.requires_grad:
+            self.actor_optimizer.zero_grad()
+            actor_loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 100.0)
+            self.actor_optimizer.step()
+        else:
+            print(f"[WARNING] Actor loss does not require grad, skipping actor update")
         
         # Update target critic
         self.critic.update_target()
@@ -608,6 +634,11 @@ class ExperienceBuffer:
 
 def export_onnx(agent, path):
     """Export actor model to ONNX"""
+    import os
+    
+    # Garantir que o diretório existe
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    
     class OnnxWrapper(nn.Module):
         def __init__(self, actor):
             super().__init__()
@@ -617,11 +648,26 @@ def export_onnx(agent, path):
             h = h_z[:, :256]
             z = h_z[:, 256:]
             mean_cont, std_cont, logits_disc = self.actor(h, z)
-            # Return continuous actions + discrete probabilities
+            # Return single concatenated tensor: [continuous_actions, discrete_probs]
+            # Shape: [batch, 2+3] = [batch, 5]
             return torch.cat([mean_cont, torch.sigmoid(logits_disc)], dim=-1)
     
-    dummy_input = torch.randn(1, 288)  # hidden_dim + state_dim
-    wrapper = OnnxWrapper(agent.actor).to(agent.device)
+    # Acessar o agente base (MultiAgentDreamer tem o agente em .agent)
+    print(f"[DEBUG] export_onnx: agent type = {type(agent)}")
+    if hasattr(agent, 'agent'):
+        print(f"[DEBUG] Using agent.agent")
+        base_agent = agent.agent
+    else:
+        print(f"[DEBUG] Using agent directly")
+        base_agent = agent
+    
+    print(f"[DEBUG] base_agent type = {type(base_agent)}")
+    print(f"[DEBUG] Has actor attr: {hasattr(base_agent, 'actor')}")
+    print(f"[DEBUG] Device: {base_agent.device}")
+    
+    # Garantir que dummy_input está na mesma device do modelo
+    dummy_input = torch.randn(1, 288, device=base_agent.device)  # hidden_dim + state_dim
+    wrapper = OnnxWrapper(base_agent.actor).to(base_agent.device)
     wrapper.eval()
     
     torch.onnx.export(
@@ -630,8 +676,9 @@ def export_onnx(agent, path):
         path,
         opset_version=11,
         input_names=["state"],
-        output_names=["action_cont", "action_disc_probs"]
+        output_names=["actions"]  # Single output containing both continuous and discrete
     )
+    print(f"[✓] Model exported to: {path}")
 
 
 def main():
