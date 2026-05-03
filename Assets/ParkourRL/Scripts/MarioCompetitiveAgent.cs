@@ -345,6 +345,17 @@ namespace ParkourRL
             timeSinceEpisodeStart += Time.fixedDeltaTime;
             episodeTime += Time.fixedDeltaTime;
 
+            // Fallback actions if trainer not connected
+            if (!actionReceivedThisEpisode && timeSinceEpisodeStart > TRAINER_GRACE_PERIOD)
+            {
+                randomActionTimer += Time.fixedDeltaTime;
+                if (randomActionTimer >= RANDOM_ACTION_INTERVAL)
+                {
+                    randomActionTimer = 0f;
+                    GenerateRandomActions();
+                }
+            }
+
             // Death by fall (checked every physics frame)
             Vector3 currentPos = transform.position;
             if (currentPos.y < startPosition.y - 3.0f)

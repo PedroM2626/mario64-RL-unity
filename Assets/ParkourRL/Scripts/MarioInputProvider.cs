@@ -11,6 +11,7 @@ namespace ParkourRL
         private MarioCompetitiveAgent competitiveAgent;
         private TeamBattleAgent teamBattleAgent;
         private ChaseAgent chaseAgent;
+        private MarioDreamerAgent dreamerAgent;
         private Component backupAgent;
         private Type backupAgentType;
 
@@ -29,6 +30,8 @@ namespace ParkourRL
                 teamBattleAgent = GetComponent<TeamBattleAgent>();
             if (chaseAgent == null)
                 chaseAgent = GetComponent<ChaseAgent>();
+            if (dreamerAgent == null)
+                dreamerAgent = GetComponent<MarioDreamerAgent>();
             if (backupAgent == null)
             {
                 if (backupAgentType == null)
@@ -104,11 +107,15 @@ namespace ParkourRL
                 result = agent.joystickInput;
             else if (competitiveAgent != null)
                 result = competitiveAgent.joystickInput;
+            else if (dreamerAgent != null)
+                result = dreamerAgent.joystickInput;
             
             // Log a cada 10 segundos para debug (somente quando ha input significativo)
             if (Time.time - lastLogTime > 10f)
             {
-                string agentName = competitiveAgent != null ? competitiveAgent.name : (agent != null ? agent.name : "null");
+                string agentName = competitiveAgent != null ? competitiveAgent.name : 
+                    (agent != null ? agent.name : 
+                    (dreamerAgent != null ? dreamerAgent.name : "null"));
                 Debug.Log($"[InputDebug] Joystick: {result}, Agent: {agentName}");
                 lastLogTime = Time.time;
             }
@@ -178,6 +185,17 @@ namespace ParkourRL
                         bool sp = chaseAgent.stompPressed;
                         if (sp) chaseAgent.stompPressed = false;
                         return sp;
+                    default: return false;
+                }
+            }
+
+            if (dreamerAgent != null)
+            {
+                switch (button)
+                {
+                    case Button.Jump: return dreamerAgent.jumpPressed;
+                    case Button.Kick: return dreamerAgent.kickPressed;
+                    case Button.Stomp: return dreamerAgent.stompPressed;
                     default: return false;
                 }
             }

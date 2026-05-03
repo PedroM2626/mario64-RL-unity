@@ -14,8 +14,9 @@ A complete system for training AI agents in Super Mario 64 parkour environments 
   - [Parkour RL (Traditional)](#1-parkour-rl-traditional)
   - [Hybrid Training System](#2-hybrid-training-system)
   - [Competitive Parkour (PPO, SAC, DQN)](#3-competitive-parkour-ppo-sac-dqn)
-  - [Team Battle](#4-team-battle)
-  - [Chase Training (Pursuer vs Fugitive)](#5-chase-training-pursuer-vs-fugitive)
+  - [Dreamer Parkour (World Model RL)](#4-dreamer-parkour-world-model-rl)
+  - [Team Battle](#5-team-battle)
+  - [Chase Training (Pursuer vs Fugitive)](#6-chase-training-pursuer-vs-fugitive)
 - [Available Scenes](#available-scenes)
 - [Usage Instructions](#usage-instructions)
 - [MLOps Integration](#mlops-integration)
@@ -31,6 +32,7 @@ A complete system for training AI agents in Super Mario 64 parkour environments 
 ## Features
 
 - **Multi-Algorithm Competitive Training**: Simultaneously train PPO, SAC, and DQN agents on the same parkour map
+- **DreamerV3 World Model RL**: Model-based RL with RSSM, actor-critic, and imagined trajectories
 - **Hybrid Learning Pipeline**: Combine Imitation Learning, Offline RL (CQL/IQL), and Online RL
 - **Parallel Environment Support**: Train with up to 4 parallel Mario agents
 - **MLOps Integration**: Full experiment tracking via MLflow with TensorBoard visualization
@@ -68,6 +70,8 @@ libsm64-unity-dev/
 │   │   │   ├── PlayerMarioSpawner.cs
 │   │   │   ├── CompetitiveParkourEnvironment.cs    [Competitive mode]
 │   │   │   ├── MarioCompetitiveAgent.cs
+│   │   │   ├── DreamerParkourEnvironment.cs        [DreamerV3 mode]
+│   │   │   ├── MarioDreamerAgent.cs
 │   │   │   ├── ChaseTrainingEnvironment.cs         [Chase mode]
 │   │   │   ├── ChaseAgent.cs
 │   │   │   ├── TeamBattleEnvironment.cs            [Team mode]
@@ -77,6 +81,7 @@ libsm64-unity-dev/
 │   │   │   ├── ParkourTraining_OldSystem.unity
 │   │   │   ├── HybridTraining.unity                [IL + RL]
 │   │   │   ├── CompetitiveParkour.unity
+│   │   │   ├── DreamerParkour.unity                [DreamerV3 RL]
 │   │   │   ├── ChaseTraining.unity
 │   │   │   └── TeamBattle.unity
 │   │   ├── Config/
@@ -102,6 +107,8 @@ libsm64-unity-dev/
 │
 ├── train_competitive_sb3.py                        [SB3 competitive training w/ TensorBoard]
 ├── train_simultaneous_sb3.py                       [Simultaneous multi-algo training]
+├── train_dreamer.py                                [DreamerV3 world model training]
+├── train_dreamer_multiagent.ps1                    [Multi-agent Dreamer training]
 ├── train_mlops.py                                  [MLOps wrapper]
 ├── trainer_mlflow.py                               [MLflow trainer]
 ├── validate_recording_integration.py               [Recording validation]
@@ -361,7 +368,119 @@ The script creates a `CompetitiveParkourEnv` (gym.Env) dedicated to this scene. 
 
 ---
 
-### 4. **Team Battle**
+### 4. **Dreamer Parkour (World Model RL)**
+
+Treinamento com **DreamerV3** - algoritmo de Model-Based RL que aprende um modelo do mundo e planeja no espaço latente.
+
+**Características:**
+- **RSSM** (Recurrent State-Space Model) - Modelo dinâmico do ambiente
+- **Actor-Critic** com learned dynamics
+- Predição de recompensas e terminações
+- Treino eficiente em dados (menos interações necessárias)
+
+**Arquivos:**
+- Scene: `Assets/ParkourRL/Scenes/DreamerParkour.unity`
+- Script: `DreamerParkourEnvironment.cs`
+- Agent: `MarioDreamerAgent.cs`
+- Trainer: `train_dreamer.py`
+
+**Observations (42-dim):**
+| Field | Indices | Description |
+|-------|---------|-------------|
+| Position (x,y,z) | 0-2 | Normalized position |
+| Direction to goal | 3-6 | Vector to goal + distance |
+| Current velocity | 7-9 | Velocity (current) |
+| Previous velocity | 10-12 | Velocity (t-1) - temporal feature |
+| Airborne + Moving | 13-14 | Binary states |
+| 12 raycasts | 15-38 | 12 directions x 2 values |
+| Ground height | 39 | Raycast down |
+| Time + Ranking | 40-41 | Temporal + competitive |
+| Last actions | 42-46 | 5 previous actions |
+
+**Actions:**
+- `[0-1]` Joystick X/Y: [-1, 1] (continuous)
+- `[2]` Jump: {0, 1} (discrete)
+- `[3]` Kick/Punch: {0, 1} (discrete)
+- `[4]` Slide/Stomp: {0, 1} (discrete)
+
+**Training:**
+```powershell
+# 1. In Unity, open DreamerParkour.unity and press Play
+
+# 2. Run Dreamer training
+python train_dreamer.py --time-scale 3.0 --tb-logdir ./tensorboard_logs
+
+# 3. Monitor
+# TensorBoard: http://localhost:6006
+# MLflow: http://localhost:5000
+```
+
+**Script Arguments:**
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--env` | Path to Unity executable | `None` (Editor) |
+| `--run-id` | Run ID | timestamp |
+| `--resume` | Resume from checkpoint | `false` |
+| `--force` | Overwrite previous runs | `false` |
+| `--batch-size` | World model batch size | `2048` (GPU) |
+| `--seq-len` | Sequence length | `50` |
+| `--horizon` | Imagination horizon | `15` |
+| `--num-agents` | Number of parallel agents | `4` |
+| `--capacity` | Experience buffer capacity | `100000` |
+| `--device` | Device (cuda/cpu) | `cuda` |
+
+**Multi-Agent Training:**
+```powershell
+# Treinamento com 4 agentes em paralelo (batch size 2048 para GPU)
+python train_dreamer.py --time-scale 5.0 --batch-size 2048 --num-agents 4
+
+# Ou use o script PowerShell
+.\train_dreamer_multiagent.ps1
+```
+
+**Configuração no Unity:**
+1. Abra `DreamerParkour.unity`
+2. Selecione o objeto `DreamerEnvironment`
+3. No Inspector, configure:
+   - `Agent Count`: 4 (número de agentes paralelos)
+   - `Competitive Mode`: false (para treinamento cooperativo)
+   - `Use Visual Observations`: false (mais rápido)
+
+**Arquitetura do Modelo:**
+```
+Observation (42D) → RSSM Encoder → Latent State z_t (32D)
+                          ↓
+Previous Action + State → Recurrent Model → Hidden State h_t (256D)
+                          ↓
+              ┌─────────────────────────┐
+              ↓                         ↓
+       Observation Decoder      Reward Predictor
+       (reconstruction)        (predicted reward)
+              ↓                         ↓
+       Actor Network          Critic Network
+       (policy)               (value function)
+```
+
+**Métricas:**
+- `world_model/obs_loss` - Erro de reconstrução
+- `world_model/reward_loss` - Erro de predição de recompensa
+- `world_model/kl_loss` - Divergência KL
+- `policy/actor_loss` - Loss do ator
+- `policy/critic_loss` - Loss do crítico
+- `policy/returns_mean` - Retorno médio estimado
+
+**Arquitetura Comparativa:**
+| Aspecto | SB3 (PPO/SAC) | DreamerV3 |
+|---------|---------------|-----------|
+| Tipo | Model-free | Model-based |
+| Dados | Alta amostragem | Eficiente em dados |
+| Planejamento | Não | Sim (imaginado) |
+| Observações | Atuais | Temporal (sequências) |
+| World Model | Não aprende | RSSM aprende dinâmica |
+
+---
+
+### 5. **Team Battle**
 
 Two teams of agents cooperate/compete using MA-POCA (Multi-Agent POsthumous Credit Assignment).
 
@@ -416,6 +535,7 @@ Decentralized training with two SAC agents: a pursuer and a fugitive.
 | **ParkourTraining_OldSystem.unity** | Legacy system | Backup | No |
 | **HybridTraining.unity** | IL + Offline RL | Recording mode | Yes |
 | **CompetitiveParkour.unity** | 3-model competition | 1 PPO + 1 SAC + 1 DQN | No |
+| **DreamerParkour.unity** | World Model RL | DreamerV3 Agent | No |
 | **TeamBattle.unity** | Team 2v2 | 4 Agents | Yes |
 | **ChaseTraining.unity** | 1v1 Chase (SAC) | 2 Agents (Pursuer + Fugitive) | Yes |
 
@@ -626,14 +746,18 @@ mlflow>=2.0.0
 mlagents==0.28.0
 mlagents-envs==0.28.0
 torch>=1.11.0
+torchvision>=0.12.0
 stable-baselines3>=2.0.0
 gymnasium>=0.28.0
 shimmy>=1.0.0
 protobuf<=3.20.3
 onnx
+onnxruntime
 pyyaml
 tensorboard>=2.12.0
 numpy>=1.21.0
+pillow>=9.0.0
+matplotlib>=3.5.0
 ```
 
 ---
