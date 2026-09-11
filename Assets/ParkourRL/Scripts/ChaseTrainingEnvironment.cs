@@ -257,15 +257,13 @@ namespace ParkourRL
             }
             bp.BehaviorName = behaviorName;
             bp.BehaviorType = Unity.MLAgents.Policies.BehaviorType.Default;
-            // Compute observation size dynamically based on agent raycast count:
-            // Base observations: 3 pos + 3 vel + 1 grounded + 7 opponent info + 1 time = 15
-            int obsSize = 15;
-            var chaseComp = chaseAgent as ChaseAgent;
-            if (chaseComp != null)
-            {
-                obsSize += chaseComp.RaycastCount * 2;
-            }
-            bp.BrainParameters.VectorObservationSize = obsSize;
+            // Fixed 31-dim obs: 15 base + 8 raycasts x2. ChaseAgent defaults
+            // RaycastCount to 8 and self-corrects; enforce here as well so a
+            // misconfigured prefab cannot silently produce 15-dim obs.
+            int raycasts = chaseAgent != null ? chaseAgent.RaycastCount : 8;
+            if (raycasts != 8)
+                Debug.LogWarning($"[ChaseTraining] RaycastCount={raycasts} != 8; forcing obs size to 31.");
+            bp.BrainParameters.VectorObservationSize = VectorObservationSize;
             bp.BrainParameters.NumStackedVectorObservations = 1;
             bp.BrainParameters.ActionSpec = ActionSpec.MakeContinuous(ContinuousActionSize);
             bp.TeamId = role == ChaseRole.Pursuer ? 0 : 1;

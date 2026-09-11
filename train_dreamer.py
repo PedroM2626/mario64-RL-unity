@@ -45,7 +45,7 @@ class RSSM(nn.Module):
               z_t ~ q(z_t | h_t, x_t)  (posterior)
               z_t ~ p(z_t | h_t)       (prior)
     """
-    def __init__(self, obs_dim=42, action_dim=5, hidden_dim=256, state_dim=32):
+    def __init__(self, obs_dim=47, action_dim=5, hidden_dim=256, state_dim=32):
         super().__init__()
         self.obs_dim = obs_dim
         self.action_dim = action_dim
@@ -101,7 +101,7 @@ class RSSM(nn.Module):
 
 class ObservationDecoder(nn.Module):
     """Decodes latent state back to observation"""
-    def __init__(self, state_dim=32, hidden_dim=256, obs_dim=42):
+    def __init__(self, state_dim=32, hidden_dim=256, obs_dim=47):
         super().__init__()
         self.decoder = nn.Sequential(
             nn.Linear(state_dim + hidden_dim, hidden_dim),
@@ -186,15 +186,34 @@ class Actor(nn.Module):
             action_cont = mean_cont
             action_disc = (logits_disc > 0).float()
         else:
-            # Sample continuous
+            # Sample continuous (non-differentiable, for env interaction only)
             dist_cont = Normal(mean_cont, std_cont)
             action_cont = dist_cont.sample()
             action_cont = torch.clamp(action_cont, -1, 1)
             
-            # Sample discrete
+            # Sample discrete (non-differentiable, for env interaction only)
             probs_disc = torch.sigmoid(logits_disc)
             action_disc = (torch.rand_like(probs_disc) < probs_disc).float()
         
+        return action_cont, action_disc
+
+    def sample_differentiable(self, h, z):
+        """Differentiable sampling for imagination / policy gradients.
+
+        - Continuous: reparameterized Normal.rsample() so grads flow to mean/std.
+        - Discrete: straight-through Bernoulli (probs + (sample - probs).detach())
+          so grads flow to logits via the probs path while keeping 0/1 outputs.
+        """
+        mean_cont, std_cont, logits_disc = self.forward(h, z)
+
+        dist_cont = Normal(mean_cont, std_cont)
+        action_cont = dist_cont.rsample()
+        action_cont = torch.clamp(action_cont, -1, 1)
+
+        probs_disc = torch.sigmoid(logits_disc)
+        sample_disc = (torch.rand_like(probs_disc) < probs_disc).float()
+        action_disc = probs_disc + (sample_disc - probs_disc).detach()
+
         return action_cont, action_disc
 
 
@@ -242,7 +261,7 @@ class DreamerAgent:
     Complete DreamerV3 Agent
     Combines world model, actor, and critic
     """
-    def __init__(self, obs_dim=42, action_dim=5, device="cuda", 
+    def __init__(self, obs_dim=47, action_dim=5, device="cuda", 
                  learning_rate=1e-4, gamma=0.99, lambda_=0.95):
         self.device = device
         self.obs_dim = obs_dim
@@ -386,97 +405,84 @@ class DreamerAgent:
     
     def train_actor_critic(self, batch_size=32, horizon=15):
         """
-        Train actor and critic using imagined trajectories
+        Train actor and critic using imagined trajectories.
+
+        Single differentiable rollout:
+        - actions via Actor.sample_differentiable (rsample + straight-through)
+        - next states via RSSM.imagine (reparameterized, grads flow)
+        - rewards/values with grad enabled
+        Critic regresses detached lambda-returns; actor maximizes mean
+        predicted reward (grads flow through dynamics to the policy).
+        World-model weights are frozen in the optimizer sense (only
+        actor/critic optimizers step), but grads flow through them.
         """
         # Initialize state if not already done
         if self.h is None or self.z is None:
             self.init_state(batch_size)
-        
-        # Start from current state
-        h = self.h.repeat(batch_size, 1)
-        z = self.z.repeat(batch_size, 1)
-        
-        # Salvar estado inicial para recalcular no actor (grafo separado)
-        h_init = h.clone()
-        z_init = z.clone()
-        
-        # Imagine trajectories
-        states_h = [h]
-        states_z = [z]
-        actions_list = []
+
+        # Start from current state, detached to avoid backprop into history.
+        # self.h/z are [1, D]; expand to [batch, D].
+        if self.h.shape[0] == 1 and batch_size > 1:
+            h = self.h.detach().repeat(batch_size, 1)
+            z = self.z.detach().repeat(batch_size, 1)
+        elif self.h.shape[0] == batch_size:
+            h = self.h.detach()
+            z = self.z.detach()
+        else:
+            # Fallback: average/trim to requested batch
+            h = self.h.detach()[:1].repeat(batch_size, 1)
+            z = self.z.detach()[:1].repeat(batch_size, 1)
+
         rewards_pred = []
         values = []
-        
-        for t in range(horizon):
-            # Sample action (com gradiente para treinamento do actor)
-            with torch.no_grad():
-                action_cont, action_disc = self.actor.sample(h, z, deterministic=False)
+
+        for _ in range(horizon):
+            # Differentiable action sample (grads flow to actor)
+            action_cont, action_disc = self.actor.sample_differentiable(h, z)
             action = torch.cat([action_cont, action_disc], dim=-1)
-            
-            # Imagine next state
+
+            # Imagine next state (differentiable dynamics)
             h, z, _, _ = self.rssm.imagine(h, z, action)
-            
-            # Predict reward and value
-            with torch.no_grad():
-                reward = self.reward_pred(h, z)
-                value = self.critic(h, z)
-            
-            states_h.append(h.detach())
-            states_z.append(z.detach())
-            actions_list.append(action.detach())
+
+            # Predict reward and value WITH grad (needed for both losses)
+            reward = self.reward_pred(h, z)
+            value = self.critic(h, z)
+
             rewards_pred.append(reward)
             values.append(value)
-        
-        # Compute returns (TD-lambda)
-        returns = self._compute_returns(rewards_pred, values)
-        
+
+        # Compute detached lambda-returns as critic targets
+        with torch.no_grad():
+            rewards_det = [r.detach() for r in rewards_pred]
+            values_det = [v.detach() for v in values]
+            returns_detached = self._compute_returns(rewards_det, values_det)
+
         # ========== Treinar Critic ==========
-        values_stacked = torch.stack(values, dim=1).squeeze(-1)
-        returns_detached = returns.detach()
+        values_stacked = torch.stack(values, dim=1).squeeze(-1)  # [B, H] with grad
         critic_loss = F.mse_loss(values_stacked, returns_detached)
-        
+
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
         torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 100.0)
         self.critic_optimizer.step()
-        
-        # ========== Treinar Actor (grafo completamente separado) ==========
-        # Recalcular TUDO a partir do estado inicial para ter um grafo fresco
-        # Usar .detach() no início para criar um novo grafo independente
-        h_actor = h_init.detach().requires_grad_(True)
-        z_actor = z_init.detach().requires_grad_(True)
-        actor_losses = []
-        
-        for t in range(horizon):
-            # Sample action do actor (com gradiente)
-            action_cont, action_disc = self.actor.sample(h_actor, z_actor, deterministic=False)
-            action_new = torch.cat([action_cont, action_disc], dim=-1)
-            
-            # Imagine next state (RSSM deve retornar tensores com gradiente)
-            h_actor, z_actor, _, _ = self.rssm.imagine(h_actor, z_actor, action_new)
-            
-            # Predict reward
-            reward_pred = self.reward_pred(h_actor, z_actor)
-            actor_losses.append(-reward_pred.squeeze())  # Negativo porque queremos maximizar
-        
-        actor_loss = torch.stack(actor_losses).mean()
-        
-        # Verificar se tem gradiente antes de fazer backward
-        if actor_loss.requires_grad:
-            self.actor_optimizer.zero_grad()
-            actor_loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 100.0)
-            self.actor_optimizer.step()
-        else:
-            print(f"[WARNING] Actor loss does not require grad, skipping actor update")
-        
+
+        # ========== Treinar Actor ==========
+        # Maximize mean predicted reward (grads flow: reward_pred -> rssm -> actor).
+        rewards_stacked = torch.stack(rewards_pred, dim=1).squeeze(-1)  # [B, H] with grad
+        actor_loss = -rewards_stacked.mean()
+
+        self.actor_optimizer.zero_grad()
+        actor_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 100.0)
+        self.actor_optimizer.step()
+
         # Update target critic
         self.critic.update_target()
-        
+
         return {
             'policy/actor_loss': actor_loss.item(),
             'policy/critic_loss': critic_loss.item(),
-            'policy/returns_mean': returns.mean().item()
+            'policy/returns_mean': returns_detached.mean().item()
         }
     
     def _compute_returns(self, rewards, values, horizon=15):
@@ -601,7 +607,7 @@ class MultiAgentDreamer:
 
 class ExperienceBuffer:
     """Buffer for collecting experience sequences"""
-    def __init__(self, capacity=10000, seq_len=50):
+    def __init__(self, capacity=200000, seq_len=50):
         self.capacity = capacity
         self.seq_len = seq_len
         self.buffer = deque(maxlen=capacity)
@@ -610,8 +616,8 @@ class ExperienceBuffer:
         self.buffer.append((obs, action, reward, done))
         
     def sample(self, batch_size):
-        """Sample sequences from buffer"""
-        if len(self.buffer) < self.seq_len * batch_size:
+        """Sample sequences from buffer (sampling with replacement)."""
+        if len(self.buffer) < self.seq_len + 1:
             return None
         
         sequences = []
@@ -633,52 +639,58 @@ class ExperienceBuffer:
 
 
 def export_onnx(agent, path):
-    """Export actor model to ONNX"""
+    """Export Dreamer recurrent policy to ONNX for EXTERNAL (Python) inference.
+
+    LIMITATION: NOT Unity Barracuda / ML-Agents compatible. The Dreamer policy
+    is recurrent (needs h, z, prev_action); Unity ML-Agents expects a stateless
+    obs->action model. Old export took a single 288-dim (h+z) tensor which
+    Unity never provides. This export takes explicit (obs 47-dim, h 256-dim,
+    z 32-dim, prev_action 5-dim) and returns (action 5-dim, next_h, next_z)
+    for Python-side rollout. For in-Unity inference, retrain the behavior
+    with PPO/SAC.
+    """
     import os
-    
-    # Garantir que o diretório existe
+
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    
-    class OnnxWrapper(nn.Module):
-        def __init__(self, actor):
+
+    class RecurrentPolicyWrapper(nn.Module):
+        def __init__(self, base):
             super().__init__()
-            self.actor = actor
-            
-        def forward(self, h_z):
-            h = h_z[:, :256]
-            z = h_z[:, 256:]
-            mean_cont, std_cont, logits_disc = self.actor(h, z)
-            # Return single concatenated tensor: [continuous_actions, discrete_probs]
-            # Shape: [batch, 2+3] = [batch, 5]
-            return torch.cat([mean_cont, torch.sigmoid(logits_disc)], dim=-1)
-    
-    # Acessar o agente base (MultiAgentDreamer tem o agente em .agent)
-    print(f"[DEBUG] export_onnx: agent type = {type(agent)}")
-    if hasattr(agent, 'agent'):
-        print(f"[DEBUG] Using agent.agent")
-        base_agent = agent.agent
-    else:
-        print(f"[DEBUG] Using agent directly")
-        base_agent = agent
-    
-    print(f"[DEBUG] base_agent type = {type(base_agent)}")
-    print(f"[DEBUG] Has actor attr: {hasattr(base_agent, 'actor')}")
-    print(f"[DEBUG] Device: {base_agent.device}")
-    
-    # Garantir que dummy_input está na mesma device do modelo
-    dummy_input = torch.randn(1, 288, device=base_agent.device)  # hidden_dim + state_dim
-    wrapper = OnnxWrapper(base_agent.actor).to(base_agent.device)
+            self.rssm = base.rssm
+            self.actor = base.actor
+
+        def forward(self, obs, h_prev, z_prev, prev_action):
+            h, z, _, _ = self.rssm.observe(h_prev, z_prev, prev_action, obs)
+            mean_cont, _, logits_disc = self.actor(h, z)
+            # Deterministic action: mean + thresholded discretes
+            action_disc = (logits_disc > 0).float()
+            action = torch.cat([mean_cont, action_disc], dim=-1)
+            return action, h, z
+
+    base_agent = agent.agent if hasattr(agent, 'agent') else agent
+
+    wrapper = RecurrentPolicyWrapper(base_agent).to(base_agent.device)
     wrapper.eval()
-    
+
+    dummy_obs = torch.randn(1, 47, device=base_agent.device)
+    dummy_h = torch.zeros(1, 256, device=base_agent.device)
+    dummy_z = torch.zeros(1, 32, device=base_agent.device)
+    dummy_a = torch.zeros(1, 5, device=base_agent.device)
+
     torch.onnx.export(
         wrapper,
-        dummy_input,
+        (dummy_obs, dummy_h, dummy_z, dummy_a),
         path,
         opset_version=11,
-        input_names=["state"],
-        output_names=["actions"]  # Single output containing both continuous and discrete
+        input_names=["obs", "h_prev", "z_prev", "prev_action"],
+        output_names=["action", "next_h", "next_z"],
+        dynamic_axes={
+            "obs": {0: "batch"}, "h_prev": {0: "batch"}, "z_prev": {0: "batch"},
+            "prev_action": {0: "batch"}, "action": {0: "batch"},
+            "next_h": {0: "batch"}, "next_z": {0: "batch"},
+        },
     )
-    print(f"[✓] Model exported to: {path}")
+    print(f"[✓] Dreamer ONNX (external inference only, not Barracuda) -> {path}")
 
 
 def main():
@@ -689,12 +701,12 @@ def main():
     parser.add_argument("--force", action="store_true", help="Overwrite previous models")
     parser.add_argument("--tb-logdir", type=str, default="./tensorboard_logs", help="TensorBoard log directory")
     parser.add_argument("--time-scale", type=float, default=3.0, help="Unity time scale")
-    parser.add_argument("--batch-size", type=int, default=2048, help="Batch size for training (default 2048 for GPU)")
+    parser.add_argument("--batch-size", type=int, default=256, help="Batch size for training (256 CPU-safe; use 2048 only on large GPU)")
     parser.add_argument("--seq-len", type=int, default=50, help="Sequence length for world model")
     parser.add_argument("--horizon", type=int, default=15, help="Imagination horizon")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--num-agents", type=int, default=4, help="Number of parallel agents in Unity")
-    parser.add_argument("--capacity", type=int, default=100000, help="Experience buffer capacity")
+    parser.add_argument("--capacity", type=int, default=200000, help="Experience buffer capacity (must exceed seq_len*8; 200k default)")
     parser.add_argument("--no-graphics", action="store_true", help="Run Unity without graphics (headless mode)")
     parser.add_argument("--timeout", type=int, default=300, help="Unity connection timeout in seconds (default 300)")
     args = parser.parse_args()
@@ -724,7 +736,7 @@ def main():
         mlflow.log_param("buffer_capacity", args.capacity)
         
         # Initialize Dreamer Agent (shared model for multi-agent)
-        base_agent = DreamerAgent(obs_dim=42, action_dim=5, device=args.device)
+        base_agent = DreamerAgent(obs_dim=47, action_dim=5, device=args.device)
         agent = MultiAgentDreamer(base_agent, num_agents=args.num_agents, device=args.device)
         
         # Experience buffer (larger for parallel agents)
@@ -885,9 +897,12 @@ def main():
                 env.step()
                 step += 1
                 
-                # Train world model
-                if step % 50 == 0 and len(buffer) >= args.seq_len * args.batch_size:
-                    batch = buffer.sample(args.batch_size)
+                # Train world model.
+                # NOTE: Buffer holds single transitions; sample() builds [B, T] sequences
+                # with replacement, so we only need len >= seq_len + margin, NOT
+                # seq_len * batch_size (old gate was impossible with defaults).
+                if step % 50 == 0 and len(buffer) >= args.seq_len * 8:
+                    batch = buffer.sample(min(args.batch_size, max(8, len(buffer) // args.seq_len)))
                     if batch is not None:
                         obs_seq, action_seq, reward_seq, done_seq = batch
                         obs_seq = obs_seq.to(args.device)
@@ -900,9 +915,12 @@ def main():
                             tb_writer.add_scalar(key, value, step)
                 
                 # Train policy (somente se tiver dados suficientes no buffer)
-                if step % 100 == 0 and len(buffer) >= args.batch_size:
+                if step % 100 == 0 and len(buffer) >= args.seq_len * 8:
                     try:
-                        policy_metrics = agent.train_actor_critic(batch_size=args.batch_size, horizon=args.horizon)
+                        # Imagination uses current RSSM state, not the full batch size.
+                        # Clamp to avoid OOM on large --batch-size values.
+                        imagine_batch = min(32, args.batch_size)
+                        policy_metrics = agent.train_actor_critic(batch_size=imagine_batch, horizon=args.horizon)
                         
                         for key, value in policy_metrics.items():
                             tb_writer.add_scalar(key, value, step)

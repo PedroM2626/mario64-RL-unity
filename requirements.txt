@@ -1,16 +1,20 @@
+# Pinned for reproducibility (Python 3.9 + ML-Agents 0.28).
+# numpy pinned <2 (ML-Agents 0.28 breaks on numpy 2.x).
+# torch 2.2 CUDA wheels require matching torchvision; CPU-only installs
+# can use the same pins (pip resolves CPU wheels if no CUDA).
 mlflow>=2.0.0
 mlagents==0.28.0
 mlagents-envs==0.28.0
-torch>=1.11.0
-torchvision>=0.12.0
-stable-baselines3>=2.0.0
-gymnasium>=0.28.0
+torch==2.2.0
+torchvision==0.17.0
+stable-baselines3==2.3.2
+gymnasium==0.29.1
 shimmy>=1.0.0
 protobuf<=3.20.3
-onnx
-onnxruntime
-pyyaml
+onnx==1.16.0
+onnxruntime>=1.17.0
+pyyaml>=6.0
 tensorboard>=2.12.0
-numpy>=1.21.0
+numpy==1.26.4
 pillow>=9.0.0
 matplotlib>=3.5.0

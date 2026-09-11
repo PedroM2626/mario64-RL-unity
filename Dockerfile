@@ -8,15 +8,20 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Install Python dependencies
+# Install Python dependencies (pinned in requirements.txt)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy project
+# Copy project (training outputs like models/, results/, mlruns/ are
+# .dockerignored/.gitignored locally; mount them as volumes at runtime)
 COPY . .
 
-# Expose MLflow port
-EXPOSE 5000
+# MLflow (:5000) + TensorBoard (:6006)
+EXPOSE 5000 6006
 
-# Default command
-CMD ["python", "train_mlops.py"]
+# NOTE: this image contains ONLY the Python trainers. Unity Editor/Build must
+# run separately and connect back, e.g.:
+#   docker run -it --rm -v ${PWD}/results:/app/results -v ${PWD}/models:/app/models \
+#     -p 5000:5000 -p 6006:6006 mariorl:latest python train_mlops.py --run-id dockerrun
+# For an offline smoke test without Unity: python evaluate.py --help
+CMD ["python", "train_mlops.py", "--help"]

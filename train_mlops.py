@@ -1,3 +1,8 @@
+"""Canonical MLOps wrapper around `mlagents-learn` with MLflow tracking.
+
+Usage: python train_mlops.py --config Assets/ParkourRL/Config/mario_parkour.yaml --run-id v1
+Deprecated duplicate: trainer_mlflow.py (now a shim delegating here).
+"""
 import mlflow
 import subprocess
 import os

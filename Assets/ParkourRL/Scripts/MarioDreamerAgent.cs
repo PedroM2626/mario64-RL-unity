@@ -106,14 +106,14 @@ namespace ParkourRL
             var bp = GetComponent<Unity.MLAgents.Policies.BehaviorParameters>();
             if (bp != null)
             {
-                if (useVisualObservations)
-                {
-                    bp.BrainParameters.VectorObservationSize = 0;
-                }
-                else
-                {
-                    bp.BrainParameters.VectorObservationSize = 42;
-                }
+            if (useVisualObservations)
+            {
+                bp.BrainParameters.VectorObservationSize = 0;
+            }
+            else
+            {
+                bp.BrainParameters.VectorObservationSize = 47;
+            }
             }
         }
 
@@ -169,7 +169,7 @@ namespace ParkourRL
             }
         }
 
-        // ===== DREAMER-OPTIMIZED OBSERVATIONS: 42 obs =====
+        // ===== DREAMER-OPTIMIZED OBSERVATIONS: 47 obs =====
         // Enhanced for world model learning with temporal and spatial features
         public override void CollectObservations(VectorSensor sensor)
         {
@@ -261,11 +261,9 @@ namespace ParkourRL
                 sensor.AddObservation(lastActions[i]);
             }
 
-            // Total: 3 + 4 + 3 + 3 + 1 + 1 + 24 + 1 + 2 + 5 = 47 (adjusted to 42)
-            // Adjusted version: 3 + 4 + 3 + 3 + 1 + 1 + 16 + 1 + 2 + 5 = 39 + 3 padding = 42
-            sensor.AddObservation(0f);
-            sensor.AddObservation(0f);
-            sensor.AddObservation(0f);
+            // Total: 3 + 4 + 3 + 3 + 1 + 1 + 24 + 1 + 2 + 5 = 47
+            // NOTE: Do NOT add padding. BrainParameters.VectorObservationSize must be 47.
+            // Python side (train_dreamer.py) must use obs_dim=47 to match.
 
             lastVelocity = velocity;
         }

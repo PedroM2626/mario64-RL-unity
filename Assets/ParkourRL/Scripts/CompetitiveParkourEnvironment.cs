@@ -9,6 +9,13 @@ namespace ParkourRL
     /// <summary>
     /// Competitive environment for 3 simultaneous Marios (PPO, SAC, DQN) on the same map.
     /// Colors and textures are configurable in the Inspector and applied at runtime.
+    /// Two training paths:
+    ///   A) ML-Agents (mario_competitive.yaml): PPO + SAC + PPO-variant filling the DQN slot
+    ///      (ML-Agents has no DQN trainer).
+    ///   B) SB3 bridge (train_competitive_sb3.py, recommended): true PPO + SAC + DQN
+    ///      with 18 discrete DQN actions (joystick + Jump; Kick/Stomp are PPO/SAC-only).
+    /// Behavior names below must match BOTH the YAML and the SB3 substring matching
+    /// ("PPO"/"SAC"/"DQN" in name).
     /// </summary>
     public class CompetitiveParkourEnvironment : MonoBehaviour
     {

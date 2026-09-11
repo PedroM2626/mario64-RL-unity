@@ -11,6 +11,9 @@ namespace ParkourRL
     /// Competitive Mario agent: competes against other Marios on the same map.
     /// Can punch (Kick/B), stomp (Stomp/Z) and run over other agents.
     /// Rewards based on relative position, speed and combat.
+    /// NOTE (DQN slot): SB3-DQN uses 18 discrete actions = 3 joyX x 3 joyY x 2 jump
+    /// (see convert_dqn_action in train_competitive_sb3.py). Kick/Stomp are always 0
+    /// for the DQN agent — combat must be learned via PPO/SAC slots.
     /// </summary>
     public class MarioCompetitiveAgent : Agent
     {

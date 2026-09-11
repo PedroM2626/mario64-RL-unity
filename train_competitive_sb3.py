@@ -1,3 +1,9 @@
+"""Canonical SB3 competitive trainer (PPO + SAC + true DQN).
+
+Scene: CompetitiveParkour.unity (behaviors MarioParkourPPO/SAC/DQN).
+Does NOT use ML-Agents YAML — bridges UnityEnvironment directly.
+Deprecated duplicate: train_simultaneous_sb3.py (now a shim delegating here).
+"""
 import os
 import argparse
 import numpy as np
@@ -20,7 +26,14 @@ import torch as th
 
 def export_onnx(model, path, is_dqn=False):
     """
-    Export the SB3 model to a simple ONNX format.
+    Export the SB3 policy to ONNX for EXTERNAL (Python) inference.
+
+    LIMITATION: this is NOT a Unity Barracuda / ML-Agents compatible model.
+    ML-Agents expects version_number metadata + split continuous/discrete
+    outputs matching ActionSpec(2, [2,2,2]). The DQN export additionally
+    outputs a single int in [0,18) (see convert_dqn_action) which Unity
+    cannot consume directly — run DQN via this Python bridge, or retrain
+    the slot with PPO/SAC for in-Unity inference.
     """
     class OnnxWrapper(th.nn.Module):
         def __init__(self, policy):
@@ -28,11 +41,11 @@ def export_onnx(model, path, is_dqn=False):
             self.policy = policy
         def forward(self, obs):
             return self.policy._predict(obs, deterministic=True)
-            
+
     dummy_input = th.randn(1, 42).to(model.device)
     wrapper = OnnxWrapper(model.policy).to(model.device)
     wrapper.eval()
-    
+
     os.makedirs(os.path.dirname(path), exist_ok=True)
     th.onnx.export(
         wrapper,
@@ -40,8 +53,10 @@ def export_onnx(model, path, is_dqn=False):
         path,
         opset_version=11,
         input_names=["vector_observation"],
-        output_names=["action"]
+        output_names=["action"],
+        dynamic_axes={"vector_observation": {0: "batch"}, "action": {0: "batch"}},
     )
+    print(f"[✓] SB3 ONNX (external inference only, not Barracuda) -> {path}")
 
 
 class CompetitiveParkourEnv(gym.Env):

@@ -14,6 +14,11 @@ namespace ParkourRL
 
     /// <summary>
     /// Agente para treino descentralizado 1v1: perseguidor vs fugitivo.
+    /// NOTE: usa 5 acoes CONTINUAS por design (SAC-only): [joyX, joyY, jump, kick, stomp]
+    /// com threshold 0.5 para os botoes. Diferente dos modos Parkour/Competitive/Team
+    /// que usam 2 continuous + 3 discrete branches. Nao unificar sem retreinar
+    /// os checkpoints em results/chase_sac*.
+    /// Obs fixa: 31-dim (requer RaycastCount=8).
     /// </summary>
     public class ChaseAgent : Agent
     {
@@ -28,7 +33,10 @@ namespace ParkourRL
         public ChaseAgent opponent;
 
         [Header("Observations")]
-        [SerializeField] private int raycastCount = 0;
+        // Fixed at 8 so total obs is always 31: 3 pos + 3 vel + 1 grounded
+        // + 7 opponent + 1 time + 16 raycasts (8x2). Do NOT leave at 0 —
+        // that silently drops to 15 obs and breaks the SAC config.
+        [SerializeField] private int raycastCount = 8;
         public int RaycastCount => raycastCount;
         [SerializeField] private float raycastDistance = 10f;
 
@@ -111,10 +119,10 @@ namespace ParkourRL
             // [1] Normalized time
             sensor.AddObservation(Mathf.Clamp01(episodeTime / maxEpisodeTime));
 
-            // [16] Raycasts
+            // [16] Raycasts (8x2; requires raycastCount=8 for 31-dim total)
             for (int i = 0; i < raycastCount; i++)
             {
-                float angle = (360f / raycastCount) * i;
+                float angle = (360f / Mathf.Max(1, raycastCount)) * i;
                 Vector3 direction = Quaternion.Euler(0f, angle, 0f) * Vector3.forward;
 
                 if (Physics.RaycastNonAlloc(position + Vector3.up * 0.5f, direction, raycastHitsCache, raycastDistance) > 0)
@@ -129,7 +137,7 @@ namespace ParkourRL
                 }
             }
 
-            // Total: 31
+            // Total: 15 base (3+3+1+7+1) + raycastCount*2 = 31 when raycastCount=8
         }
 
         public override void OnActionReceived(ActionBuffers actions)
@@ -257,6 +265,15 @@ namespace ParkourRL
             string expectedName = role == ChaseRole.Pursuer ? "ChasePursuer" : "ChaseFugitive";
             bp.BehaviorName = expectedName;
             bp.BrainParameters.ActionSpec = ActionSpec.MakeContinuous(ContinuousActionSize);
+            // Enforce fixed 31-dim obs to match config/chase_training_sac.yaml
+            // and ChaseTrainingEnvironment.VectorObservationSize.
+            if (bp.BrainParameters.VectorObservationSize != 31)
+                bp.BrainParameters.VectorObservationSize = 31;
+            if (raycastCount != 8)
+            {
+                Debug.LogWarning($"[ChaseAgent] RaycastCount={raycastCount} != 8; obs will mismatch 31-dim SAC config. Resetting to 8.");
+                raycastCount = 8;
+            }
         }
 
         private float GetEpisodeTimeout()

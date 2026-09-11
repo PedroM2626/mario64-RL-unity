@@ -560,7 +560,7 @@ namespace ParkourRL
             }
             bp.BehaviorName = agentBehaviorName;
             bp.BehaviorType = Unity.MLAgents.Policies.BehaviorType.Default;
-            bp.BrainParameters.VectorObservationSize = useVisualObservations ? 0 : 42;
+            bp.BrainParameters.VectorObservationSize = useVisualObservations ? 0 : 47;
             bp.BrainParameters.NumStackedVectorObservations = 1;
             // IMPORTANTE: 2 continuous (joystick x, y), 3 discrete (jump, kick, stomp)
             bp.BrainParameters.ActionSpec = new Unity.MLAgents.Actuators.ActionSpec(2, new int[] { 2, 2, 2 });

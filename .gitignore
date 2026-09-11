@@ -70,8 +70,13 @@ __pycache__/
 *.db
 *.zip
 
-# Training outputs
+# Training outputs (local only — never commit runs/checkpoints/logs)
 mlruns/
+models/
+results/
+tensorboard_logs/
+HybridTrainingData/
+plots/
 wandb/
 runs/
 
