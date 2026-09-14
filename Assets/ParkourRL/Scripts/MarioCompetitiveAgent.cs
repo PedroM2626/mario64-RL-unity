@@ -59,6 +59,41 @@ namespace ParkourRL
         private float randomActionTimer = 0f;
         private const float RANDOM_ACTION_INTERVAL = 0.3f;
 
+        // ===== EVAL MODE (in-game ONNX evaluation, see OnnxEvalRunner) =====
+        // When true, OnnxEvalRunner drives this agent via SetEvalAction and the
+        // random-fallback below is suppressed. Training path untouched.
+        [HideInInspector] public bool evalMode = false;
+
+        /// <summary>
+        /// Inject an externally-computed action (eval only). Also marks the episode
+        /// as action-driven so fallback random actions never overwrite it, and keeps
+        /// the camera facing the goal like the training path does.
+        /// </summary>
+        public void SetEvalAction(float joyX, float joyY, bool jump, bool kick, bool stomp)
+        {
+            evalMode = true;
+            actionReceivedThisEpisode = true;
+            usingFallbackActions = false;
+            joystickInput = new Vector2(Mathf.Clamp(joyX, -1f, 1f), Mathf.Clamp(joyY, -1f, 1f));
+            jumpPressed = jump;
+            kickPressed = kick;
+            stompPressed = stomp;
+            if (targetGoal != null)
+            {
+                cameraLookDirection = (targetGoal.position - transform.position).normalized;
+                cameraLookDirection.y = 0;
+                if (cameraLookDirection.sqrMagnitude < 0.01f)
+                    cameraLookDirection = Vector3.forward;
+            }
+            // Mirror OnActionReceived bookkeeping: training updates these once per
+            // decision (DecisionPeriod physics steps). The eval runner injects at the
+            // same cadence, so velocity observations keep training semantics.
+            // (Without this, previousPosition stays at spawn forever and the
+            // velocity obs saturates — policy sees garbage and stands still.)
+            previousPosition = transform.position;
+            previousDistanceToGoal = GetDistanceToGoal();
+        }
+
         // Reference to other agents in the same environment
         private List<MarioCompetitiveAgent> rivals = new List<MarioCompetitiveAgent>();
 
@@ -348,8 +383,9 @@ namespace ParkourRL
             timeSinceEpisodeStart += Time.fixedDeltaTime;
             episodeTime += Time.fixedDeltaTime;
 
-            // Fallback actions if trainer not connected
-            if (!actionReceivedThisEpisode && timeSinceEpisodeStart > TRAINER_GRACE_PERIOD)
+            // Fallback actions if trainer not connected (suppressed in eval mode:
+            // OnnxEvalRunner drives inputs via SetEvalAction instead).
+            if (!evalMode && !actionReceivedThisEpisode && timeSinceEpisodeStart > TRAINER_GRACE_PERIOD)
             {
                 randomActionTimer += Time.fixedDeltaTime;
                 if (randomActionTimer >= RANDOM_ACTION_INTERVAL)

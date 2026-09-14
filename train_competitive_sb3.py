@@ -47,6 +47,9 @@ def export_onnx(model, path, is_dqn=False):
     wrapper.eval()
 
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    # NOTE: NO dynamic_axes — fixed batch=1. Dynamic batch dims become symbolic
+    # (dim_param) which Barracuda mangles into degenerate shapes (e.g. 8D with a
+    # 0 dim), yielding all-zero outputs in Unity. All our inference is batch=1.
     th.onnx.export(
         wrapper,
         dummy_input,
@@ -54,9 +57,8 @@ def export_onnx(model, path, is_dqn=False):
         opset_version=11,
         input_names=["vector_observation"],
         output_names=["action"],
-        dynamic_axes={"vector_observation": {0: "batch"}, "action": {0: "batch"}},
     )
-    print(f"[✓] SB3 ONNX (external inference only, not Barracuda) -> {path}")
+    print(f"[OK] SB3 ONNX (external inference only, not Barracuda) -> {path}")
 
 
 class CompetitiveParkourEnv(gym.Env):

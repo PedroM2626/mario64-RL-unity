@@ -16,6 +16,7 @@ A complete system for training AI agents in Super Mario 64 parkour environments 
   - [Dreamer Parkour (World Model RL)](#3-dreamer-parkour-world-model-rl)
   - [Team Battle](#4-team-battle)
   - [Chase Training (Pursuer vs Fugitive)](#5-chase-training-pursuer-vs-fugitive)
+- [PPO Benchmark](#ppo-benchmark-ml-agents-vs-sb3-vs-rllib-vs-cleanrl)
 - [Available Scenes](#available-scenes)
 - [Usage Instructions](#usage-instructions)
 - [MLOps Integration](#mlops-integration)
@@ -92,6 +93,15 @@ libsm64-unity-dev/
 ├── train_mlops.py                                  [MLOps wrapper (canonical)]
 ├── trainer_mlflow.py                               [Deprecated shim -> train_mlops.py]
 ├── evaluate.py                                     [Offline evaluation of checkpoints]
+├── benchmark_ppo.py                                [PPO benchmark dispatcher]
+│
+├── benchmarks/
+│   ├── ppo_common.yaml                             [Canonical PPO hyperparams]
+│   ├── unity_shared.py                             [Shared converters/CSV/mock]
+│   ├── ppo_sb3.py / ppo_cleanrl.py                 [SB3 / CleanRL-real runners]
+│   ├── ppo_rllib.py (optional ray)                 [RLlib runner]
+│   ├── ppo_mlagents.py                             [ML-Agents YAML generator]
+│   └── compare_ppo.py                              [CSV table + plot]
 │
 ├── train_mario.ps1 / .bat                          [Standard training scripts]
 ├── train_chase.ps1                                 [Chase training script]
@@ -100,6 +110,7 @@ libsm64-unity-dev/
 ├── setup_python38.ps1 / setup_python39.ps1         [Python installers]
 │
 ├── requirements.txt                                [Python dependencies, pinned]
+├── requirements-benchmark.txt                      [Optional: ray[rllib] for benchmark]
 ├── Dockerfile                                      [Docker support]
 └── README.md
 ```
@@ -417,6 +428,88 @@ Decentralized training with two SAC agents: a pursuer and a fugitive.
 - `[4]` Slide/Stomp: [0, 1]
 
 **Performance Note:** The SAC algorithm performs neural network updates every step. To prevent freezes, the config uses `time_scale: 1.0`, `steps_per_update: 4`, and `DecisionPeriod: 8`.
+
+---
+
+## PPO Benchmark (ML-Agents vs SB3 vs RLlib vs CleanRL — all REAL frameworks)
+
+Fair PPO comparison with the **same nominal hyperparameters** (`benchmarks/ppo_common.yaml`) on **CompetitiveParkour** (42-dim obs, shared policy, `Box(5)` action with `>0` button threshold — same convention as `train_competitive_sb3.py`). Budget unit: **transitions** (consumed agent-steps), identical for every runner: 3M ≈ 1M Unity env-steps × 3 slots (ML-Agents: 1M `max_steps` per behavior).
+
+| Canonical | SB3 (real) | RLlib (real) | CleanRL (real) | ML-Agents (real) |
+|-----------|-----------|--------------|----------------|------------------|
+| `lr 3e-4` | `learning_rate` | `lr` | `lr` | `learning_rate` |
+| `gamma 0.99` | `gamma` | `gamma` | `gamma` | `extrinsic.gamma` |
+| `gae 0.95` | `gae_lambda` | `lambda` | `gae_lambda` | `lambd` |
+| `clip 0.2` | `clip_range` | `clip_param` | `clip_coef` | `epsilon` |
+| `ent 0.01` | `ent_coef` | `entropy_coeff` | `ent_coef` | `beta` |
+| `vf 0.5` | `vf_coef` | `vf_loss_coeff` | `vf_coef` | — (strength 1.0) |
+| `steps 2048` | `n_steps` (shared buffer) | `train_batch 2048` | `num_steps` × `num_envs=3` | `buffer 6144` |
+| `mini 256` | `batch_size` | `sgd_minibatch` | `num_minibatches 24` | `batch_size` |
+| `epochs 3` | `n_epochs` | `num_sgd_iter` | `update_epochs` | `num_epoch` |
+| net 256×2 tanh | `policy_kwargs` | `fcnet [256,256] tanh` | vendored Agent, HIDDEN=256 | `hidden 256×2` |
+
+Framework reality notes (all verified in-repo):
+- **SB3**: native `PPO` class + `RolloutBuffer` + `train()`, manual Unity loop.
+- **CleanRL**: byte-faithful vendor of upstream `ppo_continuous_action.py` (`benchmarks/_vendor/`, sole numeric change HIDDEN 64→256) driven through `UnityVectorEnv` (3 slots as `num_envs=3`); upstream seeding/GAE/loss code paths.
+- **RLlib**: native `PPOConfig` + `Tuner.fit()` on `UnityMultiAgentEnv` (3 agents, one shared policy). `timesteps_total` counts ENV steps (verified: iter=986 → ts=2019328=986×2048), so stop = budget/3; `rollout_fragment_length=683` env-steps ≈ one `train_batch` of agent transitions.
+- **ML-Agents**: native `mlagents-learn`, generated YAML, constant LR schedule, 3 identical PPO policies (one per behavior; ML-Agents has no cross-behavior sharing).
+
+```powershell
+# 0. Inspect canonical hyperparams
+python benchmark_ppo.py --list
+
+# 1. Smoke tests (no Unity needed)
+python benchmark_ppo.py --framework sb3 --mock --mock-steps 512 --out benchmarks/runs/smoke
+python benchmark_ppo.py --framework cleanrl --mock --mock-steps 2048 --out benchmarks/runs/smoke
+python benchmark_ppo.py --framework rllib --mock --mock-steps 4096 --out benchmarks/runs/smoke
+python benchmark_ppo.py --framework mlagents --out benchmarks/runs/smoke --run-id ppo_bench
+
+# 2. Live headless runs, one worker/port per framework (example: 3M transitions, seed 0)
+$exe = "Builds/CompetitiveHeadless/CompetitiveParkour.exe"
+python benchmark_ppo.py --framework sb3 --seed 0 --transitions 3000000 --out benchmarks/runs/one_m --env $exe --no-graphics --worker-id 0 --base-port 5005
+python benchmark_ppo.py --framework cleanrl --seed 0 --transitions 3000000 --out benchmarks/runs/one_m --env $exe --no-graphics --worker-id 1 --base-port 5015
+python benchmark_ppo.py --framework rllib --seed 0 --transitions 3000000 --out benchmarks/runs/one_m --env $exe --no-graphics --worker-id 2 --base-port 5025
+python benchmark_ppo.py --framework mlagents --out benchmarks/runs/one_m --run-id ppo_1M --transitions 3000000 --env $exe --no-graphics --base-port 5035 --seed 0
+venv_mlagents\Scripts\python.exe -m mlagents.trainers.learn benchmarks/runs/one_m/ppo_1M_ppo_mlagents.yaml --run-id ppo_1M_mlagents --seed 0 --base-port 5035 --force --env $exe --no-graphics [--torch-device cpu]
+
+# 3. Fair in-game eval, ONE protocol for all (Unity = official metrics, Python = inference):
+#    3a. (done at build time) eval build contains OnnxEvalRunner in observer mode
+#    3b. per framework (example SB3, 60 episodes, time_scale 5.0):
+python evaluate.py --framework sb3 --checkpoint benchmarks/runs/one_m/ppo_sb3_seed0.zip --env Builds/EvalBuild/CompetitiveParkourEval.exe --no-graphics --episodes 60 --time-scale 5.0 --worker-id 3 --base-port 5045 --additional-args -evalObserve 1 -evalEpisodes 60 -evalOut <abs path>/eval_sb3.csv
+#    checkpoints: sb3 .zip | cleanrl .pt (vendored Agent) | rllib Tuner dir (shared policy) | mlagents .onnx (onnxruntime + masks, deterministic heads)
+
+# 4. Compare
+python benchmarks/compare_ppo.py --dir benchmarks/runs/one_m --out benchmarks/runs/one_m/compare.png
+```
+
+Caveats:
+- Same nominal hyperparams, framework-native rollout semantics; update cadence differs slightly (SB3/RLlib ≈ every 683 env-steps on 2048 transitions; CleanRL/ML-Agents ≈ every 2048 env-steps on ~6k) with identical data/use ratios and minibatch/epochs — documented in `benchmarks/ppo_common.yaml`.
+- SB3/CleanRL/RLlib share **one** policy across the 3 slots; ML-Agents trains one policy **per** slot with identical hyperparams (no cross-behavior sharing exists).
+- Network inits/activations stay framework-native (SB3/CleanRL tanh+orthogonal; RLlib fcnet tanh; ML-Agents default).
+- Every runner writes `ppo_<fw>_seed<S>.csv` per episode — the comparison is built on those CSVs, not on any single framework's logger.
+
+**Live results (seed 0, 3M transitions ≈ 1M env-steps × 3 slots, headless builds, `time_scale 5.0`):**
+
+Training curves, episodic return, shared policy (ML-Agents curve = TB smoothed means, 500 windows; others = raw per-episode rows):
+
+| Framework | Episodes | Mean reward | Last-50 | PPO updates |
+|-----------|----------|-------------|---------|-------------|
+| ML-Agents | 500 TB windows | 103.0 | 138.1 | native (≈1/2048 env-steps, 6k-transition batches) |
+| CleanRL-real | 181699 | 84.0 | 119.4 | 488 (6144-batch) |
+| RLlib-real | 145287 | 63.3 | 68.6 | train_batch 2048 (≈1/683 env-steps) |
+| SB3 | 148441 | 57.6 | 54.2 | ~1465 (shared 2048-buffer) |
+
+In-game eval (deterministic policies, shared across 3 slots, 60 episodes, `time_scale 5.0`, Unity = official metrics):
+
+| Framework | Success | Min dist to goal | Mean return |
+|-----------|---------|------------------|-------------|
+| CleanRL-real | 0/60 | **13.8 m** | **175.1** |
+| RLlib-real | 0/60 | 28.9 m | 65.8 |
+| ML-Agents | 0/60 | 30.6 m | 54.6 |
+| SB3 | 0/60 | 31.5 m | 46.7 |
+
+Reading: 1M env-steps from scratch does not complete this parkour with any framework (agents fall within ~2 s; 0/60 everywhere — the map is hard). Two honest findings: (1) **CleanRL-real wins on both measures** — best training-final among bridge runs and 2× closer to the goal in eval; (2) **ML-Agents trains best stochastically but evals worst deterministically** (and vice-versa for CleanRL, whose training curve collapses ~2.5M yet whose deterministic mean excels) — same-hyperparams PPO can diverge between exploration and exploitation regimes. RLlib is the most stable curve with the lowest ceiling; SB3 collapses late (~2.2M) and plateaus ~50. Single seed — treat gaps <15% as noise; the CleanRL min-dist gap (>2×) is the only large effect.
+Curves: `benchmarks/runs/one_m/compare.png` (gitignored). Checkpoints: `ppo_sb3_seed0.zip`, `ppo_cleanrl_seed0.pt`, `ppo_rllib_seed0_final/`, `results/ppo_1M_b_mlagents/`. Eval CSVs: `benchmarks/runs/eval_{sb3,cleanrl,rllib,mlagents}.csv`. Rerun seeds 1–2 for error bars.
 
 ---
 

@@ -75,6 +75,7 @@ mlruns/
 models/
 results/
 tensorboard_logs/
+Builds/
 HybridTrainingData/
 plots/
 wandb/

@@ -1,0 +1,80 @@
+# Canonical PPO hyperparameters for the cross-framework benchmark.
+# Scene: CompetitiveParkour.unity — 42-dim obs, Box(5) action ([joyX, joyY, jump, kick, stomp]
+# with >0 threshold mapping to discrete buttons, mirroring train_competitive_sb3.py).
+# One shared PPO policy drives all detected behaviors (parameter sharing).
+#
+# Honesty note: these are the SAME NOMINAL hyperparameters in each framework's
+# native API, but rollout/buffer semantics differ per framework (documented below
+# and in benchmarks/README). This is the standard way to do cross-framework PPO
+# comparisons without rewriting any framework's rollout logic.
+
+common:
+  learning_rate: 0.0003
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2        # sb3 clip_range | rllib clip_param | cleanrl clip_coef | mlagents epsilon
+  ent_coef: 0.01         # sb3 ent_coef | rllib entropy_coeff | cleanrl ent_coef | mlagents beta
+  vf_coef: 0.5           # sb3 vf_coef | rllib vf_loss_coeff | cleanrl vf_coef | mlagents (no direct knob, extrinsic strength 1.0)
+  max_grad_norm: 0.5
+  n_steps: 2048          # rollout length per update cycle (sb3 n_steps | cleanrl num_steps | rllib rollout_fragment_length)
+  minibatch_size: 256    # sb3 batch_size | rllib sgd_minibatch_size | cleanrl minibatch_size | mlagents batch_size
+  n_epochs: 3            # sb3 n_epochs | rllib num_sgd_iter | cleanrl update_epochs | mlagents num_epoch
+  # Transition (agent-step) budget per run, counted IDENTICALLY by every runner:
+  # each consumed (obs, action, reward) tuple = 1 transition. 3M ~= 1M Unity
+  # env-steps x 3 behavior slots. ML-Agents uses max_steps = budget/3 per behavior.
+  total_transitions: 3000000
+  seeds: [0, 1, 2]
+
+env:
+  scene: "CompetitiveParkour"
+  obs_size: 42
+  action_desc: "Box(5) in [-1,1]: [joyX, joyY, jump, kick, stomp]; buttons thresholded at >0"
+  time_scale: 3.0
+  # Which Unity behaviors the shared policy drives (substring match, same as train_competitive_sb3.py).
+  # Empty = drive ALL detected behaviors with the shared policy.
+  behavior_filter: []
+
+mlagents:
+  # ML-Agents has no vf_coef / max_grad_norm knobs; extrinsic strength stays 1.0.
+  # buffer_size semantics: ML-Agents collects buffer_size steps across ALL agents
+  # before updates, while SB3 collects n_steps PER env. We set buffer_size to
+  # n_steps * expected_agents (3) rounded up, so update cadence is comparable.
+  trainer_type: "ppo"
+  buffer_size: 6144
+  network:
+    normalize: true
+    hidden_units: 256
+    num_layers: 2
+  reward_signals:
+    extrinsic: { gamma: 0.99, strength: 1.0 }
+  time_horizon: 128
+  summary_freq: 2000
+  max_steps: 200000
+  threaded: true
+
+sb3:
+  policy: "MlpPolicy"
+  policy_kwargs: { net_arch: [256, 256] }
+  device: "auto"
+
+rllib:
+  framework: "torch"
+  num_workers: 0          # keep Unity bridge single-process (Unity envs are not fork-safe here)
+  num_envs_per_worker: 1
+  train_batch_size: 2048  # ~= n_steps; RLlib splits into sgd_minibatch_size chunks
+  sgd_minibatch_size: 256
+  num_sgd_iter: 3
+  vf_loss_coeff: 0.5
+  entropy_coeff: 0.01
+  clip_param: 0.2
+  lambda: 0.95
+
+cleanrl:
+  # CleanRL-REAL: byte-faithful vendor of upstream ppo_continuous_action.py in
+  # benchmarks/_vendor/ (sole numeric change HIDDEN 64->256); driven through
+  # UnityVectorEnv (3 slots as num_envs=3). See benchmarks/ppo_cleanrl.py.
+  num_minibatches: 8      # 6144 / 256 (batch = num_envs 3 x num_steps 2048)
+  update_epochs: 3
+  norm_adv: true
+  clip_vloss: true
+  target_kl: null

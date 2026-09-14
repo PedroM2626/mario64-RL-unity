@@ -1,16 +1,25 @@
-"""Offline + Unity evaluation for SB3 checkpoints (PPO/SAC/DQN).
+"""Benchmark evaluation: ONE protocol for all 4 PPO frameworks (SB3/CleanRL/RLlib/ML-Agents).
 
-Two modes:
-  1) --mock (default, no Unity): smoke test — loads the .zip, runs N forward
-     passes on random obs of the model's expected size, optionally checks the
-     sibling .onnx exists. Verifies the checkpoint is not corrupt.
-  2) --env <build> or Editor (press Play): real rollout — connects via
-     UnityEnvironment, runs deterministic episodes, reports mean reward/length.
+Design (fairness):
+- The Unity player (Builds/EvalBuild, with OnnxEvalRunner in OBSERVER mode)
+  owns the OFFICIAL metrics: exact goal success, completion time, min distance.
+  Launch it with -evalObserve 1 -evalEpisodes N -evalOut <csv> (pass through
+  --additional-args so the SAME player serves every framework).
+- This script only runs policy inference (deterministic) for the chosen
+  framework and drives ALL detected behaviors with that ONE shared policy —
+  the same shared-policy protocol as training. Per-episode rewards/lengths
+  printed here are supplementary; the Unity CSV is the verdict.
+
+Policy loaders (all deterministic):
+- sb3:      PPO/SAC/DQN .zip, predict(deterministic=True)
+- cleanrl:  .pt into the VENDORED CleanRL Agent, actor_mean (their deterministic path)
+- rllib:    Tuner checkpoint dir, shared policy compute_single_action(explore=False)
+- mlagents: .onnx via onnxruntime (vector_observation + all-ones action_masks in;
+  deterministic_continuous_actions + discrete 0/1 branches out)
 
 Examples:
-  python evaluate.py --checkpoint models/<run>/MarioParkourPPO_final.zip --mock
-  python evaluate.py --checkpoint models/<run>/MarioParkourSAC_final.zip --episodes 5
-  python evaluate.py --checkpoint models/<run>/MarioParkourDQN_final.zip --episodes 5 --env ./Builds/Game.exe
+  python evaluate.py --framework sb3 --checkpoint benchmarks/runs/one_m/ppo_sb3_seed0.zip --env Builds/EvalBuild/CompetitiveParkourEval.exe --no-graphics --episodes 60 --additional-args -evalObserve 1 -evalEpisodes 60 -evalOut D:/libsm64-unity-master/benchmarks/runs/eval_sb3.csv
+  (--additional-args MUST be last; everything after it goes to Unity verbatim.)
 """
 import argparse
 import os
@@ -19,161 +28,193 @@ import sys
 import numpy as np
 
 
-def detect_algo(checkpoint_path, forced):
-    if forced and forced != "auto":
-        return forced.upper()
-    name = os.path.basename(checkpoint_path).upper()
-    for algo in ("PPO", "SAC", "DQN"):
-        if algo in name:
-            return algo
-    return "PPO"
+# ---------------------------------------------------------------- policies ---
+class SB3Policy:
+    def __init__(self, checkpoint):
+        from stable_baselines3 import PPO
+        self.model = PPO.load(checkpoint)
+
+    def __call__(self, obs):
+        action, _ = self.model.predict(obs, deterministic=True)
+        return np.asarray(action, dtype=np.float32).flatten()
 
 
-def load_model(checkpoint, algo):
-    from stable_baselines3 import PPO, SAC, DQN
+class CleanRLPolicy:
+    def __init__(self, checkpoint):
+        import torch
+        from gymnasium import spaces
 
-    cls = {"PPO": PPO, "SAC": SAC, "DQN": DQN}[algo]
-    # Load without env (policy-only) for mock; env attached later for Unity eval.
-    return cls.load(checkpoint)
+        from benchmarks._vendor.cleanrl_ppo_continuous_master import Agent
 
+        class ShimEnvs:
+            single_observation_space = spaces.Box(low=-10.0, high=10.0, shape=(42,),
+                                                  dtype=np.float32)
+            single_action_space = spaces.Box(low=-1.0, high=1.0, shape=(5,), dtype=np.float32)
 
-def mock_eval(checkpoint, algo, steps=200):
-    model = load_model(checkpoint, algo)
-    obs_size = int(np.prod(model.observation_space.shape))
-    print(f"[*] Loaded {algo} from {checkpoint} (obs_size={obs_size})")
+        self.torch = torch
+        self.agent = Agent(ShimEnvs())
+        self.agent.load_state_dict(torch.load(checkpoint, map_location="cpu"))
+        self.agent.eval()
 
-    rng = np.random.default_rng(0)
-    for i in range(steps):
-        obs = rng.uniform(-1, 1, size=(obs_size,)).astype(np.float32)
-        action, _ = model.predict(obs, deterministic=True)
-        if i == 0:
-            print(f"[*] Sample action[{i}]: {np.asarray(action).flatten()[:8]}")
-
-    # Sibling ONNX check (export is external-inference only, see script headers)
-    onnx_path = os.path.splitext(checkpoint)[0] + ".onnx"
-    if os.path.exists(onnx_path):
-        print(f"[*] Sibling ONNX found: {onnx_path} (external inference only, not Barracuda)")
-    else:
-        print(f"[!] No sibling ONNX at {onnx_path} (run training to export, or ignore)")
-
-    print(f"[✓] Mock smoke test passed ({steps} forward passes).")
+    def __call__(self, obs):
+        with self.torch.no_grad():
+            mean = self.agent.actor_mean(
+                self.torch.as_tensor(obs, dtype=self.torch.float32).unsqueeze(0))
+        return mean.cpu().numpy()[0]
 
 
-def unity_eval(checkpoint, algo, env_path, episodes=5, time_scale=1.0):
-    from mlagents_envs.environment import UnityEnvironment
-    from mlagents_envs.side_channel.engine_configuration_channel import EngineConfigurationChannel
+class RLLibPolicy:
+    def __init__(self, checkpoint):
+        from ray.rllib.algorithms.ppo import PPO as PPOAlgo
 
-    model = load_model(checkpoint, algo)
-    obs_size = int(np.prod(model.observation_space.shape))
-    print(f"[*] Loaded {algo} from {checkpoint} (obs_size={obs_size})")
+        algo = PPOAlgo.from_checkpoint(checkpoint)
+        self.policy = algo.get_policy("shared")
 
-    channel = EngineConfigurationChannel()
-    channel.set_configuration_parameters(time_scale=time_scale)
-    env = UnityEnvironment(file_name=env_path, side_channels=[channel])
-    env.reset()
-    behavior_names = list(env.behavior_specs.keys())
-    print(f"[*] Behaviors: {behavior_names}")
-    if not behavior_names:
-        print("[!] No behaviors detected. Press Play in Unity (Editor mode) and retry.")
-        env.close()
-        return 1
+    def __call__(self, obs):
+        # Deterministic (explore=False) single action from the shared policy.
+        return np.asarray(
+            self.policy.compute_single_action(obs, explore=False)[0],
+            dtype=np.float32).flatten()
 
-    # Pick the behavior matching the algo substring, fallback to first.
-    target = next((b for b in behavior_names if algo in b.upper()), behavior_names[0])
-    print(f"[*] Evaluating on behavior: {target} (deterministic, {episodes} episodes)")
 
-    rewards, lengths = [], []
-    ep_reward, ep_len = 0.0, 0
-    done_eps = 0
-    obs = np.zeros(obs_size, dtype=np.float32)
+class MLAagentsPolicy:
+    def __init__(self, checkpoint):
+        import onnxruntime as rt
 
-    try:
-        while done_eps < episodes:
-            dec, term = env.get_steps(target)
-            # Terminal steps: one env episode finished per terminated agent.
-            # Competitive scene has 1 agent per behavior; multi-agent behaviors
-            # count each terminated agent as one episode.
-            for i in range(len(term)):
-                ep_reward += float(term.reward[i])
-                ep_len += 1
-                rewards.append(ep_reward)
-                lengths.append(ep_len)
-                done_eps += 1
-                print(f"[Ep {done_eps}] reward={ep_reward:.2f} len={ep_len}")
-                ep_reward, ep_len = 0.0, 0
-                if done_eps >= episodes:
-                    break
-            if done_eps >= episodes:
-                break
-            if len(dec) == 0:
-                env.step()
-                continue
-            # Decision steps: predict per-agent action (handles N agents/behavior).
-            from mlagents_envs.base_env import ActionTuple
+        self.sess = rt.InferenceSession(checkpoint, providers=["CPUExecutionProvider"])
+        names = {i.name for i in self.sess.get_inputs()}
+        # ML-Agents export names the obs "obs_0" (not "vector_observation").
+        non_mask = [n for n in names if "mask" not in n]
+        self.obs_name = next((n for n in ("vector_observation", "obs_0", "obs") if n in names),
+                             sorted(non_mask)[0] if non_mask else sorted(names)[0])
+        self.mask_name = next((n for n in ("action_masks", "action_mask") if n in names), None)
+        outs = [(o.name, o.shape) for o in self.sess.get_outputs()]
+        # Prefer deterministic_* heads when present (ML-Agents export convention).
+        self.cont_name = next((n for n, s in outs if "deterministic_continuous" in n),
+                              next((n for n, s in outs if "continuous" in n and "shape" not in n), None))
+        self.disc_name = next((n for n, s in outs if "deterministic_discrete" in n or
+                               (n.startswith("discrete") and "shape" not in n)), None)
+        if self.cont_name is None:
+            raise RuntimeError(f"Cannot find continuous head in {outs}")
 
-            cont_list, disc_list = [], []
-            for i in range(len(dec)):
-                obs = dec.obs[0][i]
-                ep_reward += float(dec.reward[i])
-                ep_len += 1
-                action, _ = model.predict(obs, deterministic=True)
-                if algo == "DQN":
-                    act = int(np.asarray(action).flatten()[0])
-                    j = act % 2
-                    act //= 2
-                    y = act % 3
-                    act //= 3
-                    x = act % 3
-                    cont_list.append([-1.0 + x, -1.0 + y])
-                    disc_list.append([j, 0, 0])
-                else:
-                    a = np.asarray(action).flatten()
-                    cont_list.append([a[0], a[1]])
-                    disc_list.append([1 if a[2] > 0 else 0,
-                                      1 if a[3] > 0 else 0,
-                                      1 if a[4] > 0 else 0])
-            env.set_actions(target, ActionTuple(
-                continuous=np.array(cont_list, dtype=np.float32),
-                discrete=np.array(disc_list, dtype=np.int32),
-            ))
-            env.step()
-    except KeyboardInterrupt:
-        print("[!] Interrupted.")
-    finally:
-        env.close()
+    def __call__(self, obs):
+        feed = {self.obs_name: obs.reshape(1, -1).astype(np.float32)}
+        if self.mask_name is not None:
+            feed[self.mask_name] = np.ones((1, 6), dtype=np.float32)
+        outs = self.sess.run([self.cont_name] + ([self.disc_name] if self.disc_name else []), feed)
+        cont = np.asarray(outs[0]).flatten()
+        disc = (np.asarray(outs[1]).flatten() > 0.5).astype(np.float32) if len(outs) > 1 else np.zeros(3, np.float32)
+        return np.concatenate([cont[:2], disc[:3]]).astype(np.float32)
 
-    if rewards:
-        print(f"[✓] Episodes={len(rewards)} mean_reward={np.mean(rewards):.2f} "
-              f"mean_len={np.mean(lengths):.1f}")
-        return 0
-    print("[!] No episodes completed.")
-    return 2
+
+def load_policy(framework, checkpoint):
+    makers = {"sb3": SB3Policy, "cleanrl": CleanRLPolicy,
+              "rllib": RLLibPolicy, "mlagents": MLAagentsPolicy}
+    print(f"[*] Loading {framework} policy from {checkpoint}", flush=True)
+    return makers[framework](checkpoint)
+
+
+# ------------------------------------------------------------------ driver ---
+def box5_to_unity(act):
+    from mlagents_envs.base_env import ActionTuple
+
+    a = np.asarray(act, dtype=np.float32).flatten()
+    return ActionTuple(
+        continuous=np.array([[a[0], a[1]]], dtype=np.float32),
+        discrete=np.array([[1 if a[2] > 0 else 0,
+                            1 if a[3] > 0 else 0,
+                            1 if a[4] > 0 else 0]], dtype=np.int32))
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(description="Evaluate SB3 checkpoints (mock or Unity).")
-    p.add_argument("--checkpoint", required=True, help="Path to SB3 .zip (PPO/SAC/DQN)")
-    p.add_argument("--algo", default="auto", choices=["auto", "ppo", "sac", "dqn"])
-    p.add_argument("--mock", action="store_true",
-                   help="Smoke test without Unity (load + forward passes only)")
-    p.add_argument("--env", default=None, help="Unity build path (None = Editor with Play pressed)")
-    p.add_argument("--episodes", type=int, default=5)
-    p.add_argument("--steps", type=int, default=200, help="Forward passes for --mock")
+    p = argparse.ArgumentParser(description="Benchmark eval: one protocol, all frameworks.")
+    p.add_argument("--framework", required=True, choices=["sb3", "cleanrl", "rllib", "mlagents"])
+    p.add_argument("--checkpoint", required=True)
+    p.add_argument("--env", default=None, help="Unity build (launched with --additional-args)")
+    p.add_argument("--episodes", type=int, default=60, help="Total terminal episodes across all slots")
     p.add_argument("--time-scale", type=float, default=1.0)
+    p.add_argument("--no-graphics", action="store_true")
+    p.add_argument("--worker-id", type=int, default=3)
+    p.add_argument("--base-port", type=int, default=5045)
+    p.add_argument("--timeout", type=int, default=300)
+    p.add_argument("--additional-args", nargs=argparse.REMAINDER, default=[],
+                   help="Extra CLI args forwarded to the Unity player; MUST come last, e.g. --additional-args -evalObserve 1 -evalEpisodes 60 -evalOut <csv>")
     args = p.parse_args(argv)
 
     if not os.path.exists(args.checkpoint):
         print(f"[X] Checkpoint not found: {args.checkpoint}")
         return 1
 
-    algo = detect_algo(args.checkpoint, args.algo)
-    # --mock = offline smoke test. Otherwise connect to Unity:
-    # --env <build> for builds, or env=None + Play pressed for Editor.
-    if args.mock:
-        mock_eval(args.checkpoint, algo, steps=args.steps)
+    from mlagents_envs.environment import UnityEnvironment
+    from mlagents_envs.side_channel.engine_configuration_channel import EngineConfigurationChannel
+
+    policy = load_policy(args.framework, args.checkpoint)
+    # Smoke the policy once before launching Unity (fail fast on bad checkpoints).
+    print(f"[*] Sample action: {policy(np.zeros(42, dtype=np.float32))}", flush=True)
+
+    channel = EngineConfigurationChannel()
+    channel.set_configuration_parameters(time_scale=args.time_scale)
+    env = UnityEnvironment(file_name=args.env, worker_id=args.worker_id,
+                           base_port=args.base_port, side_channels=[channel],
+                           no_graphics=args.no_graphics, timeout_wait=args.timeout,
+                           additional_args=args.additional_args or None)
+    env.reset()
+    behaviors = list(env.behavior_specs.keys())
+    print(f"[*] Driving (shared {args.framework} policy): {behaviors}", flush=True)
+
+    rewards, lengths = [], []
+    ep_reward = {b: 0.0 for b in behaviors}
+    ep_len = {b: 0 for b in behaviors}
+    done_eps = 0
+    try:
+        while done_eps < args.episodes:
+            send = {}
+            for b in behaviors:
+                dec, term = env.get_steps(b)
+                for i in range(len(term)):
+                    ep_reward[b] += float(term.reward[i])
+                    ep_len[b] += 1
+                    rewards.append(ep_reward[b])
+                    lengths.append(ep_len[b])
+                    done_eps += 1
+                    print(f"[{b}] ep {done_eps}/{args.episodes} "
+                          f"reward={ep_reward[b]:.2f} len={ep_len[b]}", flush=True)
+                    ep_reward[b], ep_len[b] = 0.0, 0
+                    if done_eps >= args.episodes:
+                        break
+                if done_eps >= args.episodes:
+                    break
+                if len(dec) > 0:
+                    cont, disc = [], []
+                    for i in range(len(dec)):
+                        ep_reward[b] += float(dec.reward[i])
+                        ep_len[b] += 1
+                        a = policy(dec.obs[0][i].astype(np.float32))
+                        at = box5_to_unity(a)
+                        cont.append(at.continuous[0])
+                        disc.append(at.discrete[0])
+                    from mlagents_envs.base_env import ActionTuple
+                    send[b] = ActionTuple(continuous=np.stack(cont), discrete=np.stack(disc))
+            for b, a in send.items():
+                env.set_actions(b, a)
+            env.step()
+    except Exception as e:
+        # Unity side (observer) may quit first once IT reaches its target —
+        # that severs this connection. Partial results still reported.
+        print(f"[!] Stopped early ({type(e).__name__}: {e}). "
+              f"Reporting {len(rewards)} episodes.", flush=True)
+    finally:
+        try:
+            env.close()
+        except Exception:
+            pass
+
+    if rewards:
+        print(f"[OK] {args.framework}: episodes={len(rewards)} "
+              f"mean_reward={np.mean(rewards):.2f} mean_len={np.mean(lengths):.1f}", flush=True)
         return 0
-    return unity_eval(args.checkpoint, algo, args.env, episodes=args.episodes,
-                      time_scale=args.time_scale)
+    print("[X] No episodes completed.")
+    return 2
 
 
 if __name__ == "__main__":

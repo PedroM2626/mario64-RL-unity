@@ -1,0 +1,27 @@
+# Optional dependencies for the REAL cross-framework PPO benchmark.
+# Base requirements.txt already covers: torch, gymnasium, numpy, matplotlib, pyyaml.
+#
+# - SB3 path: nothing extra (stable-baselines3 is in base requirements).
+# - CleanRL path: VENDORED (benchmarks/_vendor/cleanrl_ppo_continuous_master.py),
+#   byte-faithful copy of upstream ppo_continuous_action.py. NOT pip-installed
+#   because the newest CleanRL on Python 3.8 (1.2.0) would downgrade
+#   stable-baselines3 2.4.1 -> 1.2.0 and gymnasium 1.0.0 -> 0.28.1
+#   (verified via `pip install --dry-run`). Needs only `tyro` (CLI import):
+tyro
+# - RLlib path: real ray[rllib] 2.9.0 (last ray supporting Python 3.8).
+#   Installed with --no-deps to protect pinned torch/gymnasium/numpy/protobuf,
+#   then gap-filled with builds that touch nothing pinned:
+ray==2.9.0
+jsonschema
+msgpack>=1.0,<2.0
+dm-tree
+lz4
+psutil
+setproctitle
+tensorboardX
+aiosignal
+frozenlist
+aiohttp
+opencv-python-headless
+# - Venv-local compat fixes (build/runtime only, no training impact):
+#   setuptools==70.3.0 (ray 2.9 imports pkg_resources._vendor, removed in setuptools 75)

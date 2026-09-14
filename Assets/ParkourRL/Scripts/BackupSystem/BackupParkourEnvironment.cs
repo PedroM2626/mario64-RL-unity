@@ -154,6 +154,21 @@ namespace ParkourRL.BackupSystem
             justSpawned = false;
         }
 
+        private void RespawnMario()
+        {
+            Vector3 spawnPos = currentSpawnPoint + Vector3.up * 1f;
+            if (currentMario == null)
+            {
+                SpawnMario();
+                return;
+            }
+            SM64Mario sm64Mario = currentMario.GetComponent<SM64Mario>();
+            if (sm64Mario != null)
+                sm64Mario.Teleport(spawnPos);
+            else
+                currentMario.transform.position = spawnPos;
+        }
+
         public void SetCheckpoint(Vector3 position)
         {
             currentSpawnPoint = position;

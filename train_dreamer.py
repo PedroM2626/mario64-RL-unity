@@ -684,13 +684,8 @@ def export_onnx(agent, path):
         opset_version=11,
         input_names=["obs", "h_prev", "z_prev", "prev_action"],
         output_names=["action", "next_h", "next_z"],
-        dynamic_axes={
-            "obs": {0: "batch"}, "h_prev": {0: "batch"}, "z_prev": {0: "batch"},
-            "prev_action": {0: "batch"}, "action": {0: "batch"},
-            "next_h": {0: "batch"}, "next_z": {0: "batch"},
-        },
     )
-    print(f"[✓] Dreamer ONNX (external inference only, not Barracuda) -> {path}")
+    print(f"[OK] Dreamer ONNX (external inference only, not Barracuda) -> {path}")
 
 
 def main():
